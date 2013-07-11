@@ -40,6 +40,9 @@ TESTRUN = 0
 PROFILE = 0
 
 
+
+
+
 def find_ortho_cluster(g):
     'returns the number of the cluster, to which gene "g" belongs'
     return
@@ -259,64 +262,85 @@ def process(paths):
                 print 'this should never happen'
                 print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
             else:
-                cluster_weights[c] = {link: weight}
+                cluster_weights[c][link] = weight
+        if len(cluster_weights[c]) == 0:
+            del cluster_weights[c]
     print
     print 'Total cluster pair weights calculated: %s' % num_pairs
 
 
     print 'Resolving multi-maps to single species by weight, removing self-links.'
     print '%s initial link seeds' % len(cluster_weights)
-    for c1 in cluster_weights:
+    for c1 in cluster_weights.iterkeys():
         # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
         # Group all linked clusters by species.
         by_species = {}
         # Populate by-species group.
-        for c2 in cluster_weights[c1]:
+        for c2 in cluster_weights[c1].iterkeys():
             if c2[0] not in by_species:
-                by_species[c2[0]] = [(cluster_weights[c1][c2], c2)]
-            else:
-                by_species[c2[0]].append((cluster_weights[c1][c2], c2))
+                by_species[c2[0]] = []
+            by_species[c2[0]].append((cluster_weights[c1][c2], c2))
         # Iterate all groups, filling weights_clean and weights_intra.
-#        print by_species
+        if c1 == ('scabiei_87.22.faa', 15):
+            print 'by_species', by_species
         for s, v in by_species.iteritems():
             # Intra.
             if s == c1[0]:
                 for onec in v:
-                    if c1 in weights_intra:
-                        weights_intra[c1][onec[1]] = onec[0]
-                    else:
-                        weights_intra[c1] = {onec[1]: onec[0]}
+                    if c1 not in weights_intra:
+                        weights_intra[c1] = {}
+                    weights_intra[c1][onec[1]] = onec[0]
             # Normal case.
-            if len(v) == 1:
-                if c1 in weights_clean:
-                    weights_clean[c1][v[0][1]] = v[0][0]
-                else:
-                    weights_clean[c1] = {v[0][1]: v[0][0]}
+            elif len(v) == 1:
+                if c1 not in weights_clean:
+                    weights_clean[c1] = {}
+                weights_clean[c1][v[0][1]] = v[0][0]
             # Multi-map case.
             elif len(v) > 1:
                 best = sorted(v)[-1]
-                if c1 in weights_clean:
-                    weights_clean[c1][best[1]] = best[0]
-                else:
-                    weights_clean[c1] = {best[1]: best[0]}
+                if c1 not in weights_clean:
+                    weights_clean[c1] = {}
+                weights_clean[c1][best[1]] = best[0]
             else:
                 print 'impossible'
                 sys.exit()
+        if c1 == ('scabiei_87.22.faa', 15):
+            print 'intra', weights_intra[c1]
+            print 'clean', weights_clean[c1]
     print '\t%s self-link seeds separated' % len(weights_intra)
     print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
-    sys.exit()
+
+
     # TODO: prune links below the threshold (default threshold is 0.0)
 
 
     print 'Grouping into clusters with 11, 10, ... links.'
-    # sort DESC from clusters with 11 links down to unique clusters with 0 links
-    #
+    # Dict grouping weights_clean by the number of links inside.
+    by_count = {}
+    # Init.
+    for i in range(1, len(species) + 1):
+        by_count[i] = {}
+    for c1, nested_dict in weights_clean.iteritems():
+        # +1 for the c1, which is not counted.
+        group_len = len(nested_dict) + 1
+        try:
+            assert group_len <= len(species)
+        except:
+            print 'group_len', group_len
+            print 'c1', c1
+            print 'nested', nested_dict
+            raise
+        by_count[group_len][c1] = nested_dict
+    print 'Summary:'
+    for i in range(len(species), 0, -1):
+        print '\t%s: %s groups' % (i, len(by_count[i]))
+
     # using cluster products, for each group of same-links clusters output tables for them:
     # Clusters with 11 links (a total of XXX):
     # sp1 sp2 sp3 ...
     # cl1 cl2 cl3 ...
     # ...
-    #
+
     # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
     # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
     # we'll show link weights between 55 pairs).
@@ -326,6 +350,7 @@ def process(paths):
     # cl2     -  0.7 0.5
     # cl3         -  0.8
     # cl4             -
+
     # Once per species, show a table of intra-species cluster links, with weights;
     # looks just like the above weights table, but now only clusters from single
     # species are used.
@@ -379,6 +404,7 @@ USAGE
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
+    parser.add_argument(--threshold, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
 
     # Process arguments
     args = parser.parse_args()
