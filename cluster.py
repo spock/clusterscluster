@@ -52,7 +52,7 @@ def parse_cluster_number(note):
             return int(i[16:])
 
 
-def process(prefix, config, paranoid, paths, threshold = 0.0):
+def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     'main method which does all the work'
 
     # Declare important variables.
@@ -411,7 +411,7 @@ USAGE
 #        parser.add_argument("-i", "--include", dest="include", help="only include paths matching this regex pattern. Note: exclude is given preference over include. [default: %(default)s]", metavar="RE" )
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    parser.add_argument(dest="prefix", help="output CSV files prefix", metavar="prefix")
+    parser.add_argument("--prefix", default='out_', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
@@ -439,7 +439,7 @@ USAGE
 #        for inpath in paths:
 #            ### do something with inpath ###
 #            print(inpath)
-    process(args.prefix, args.config, args.paranoid, args.paths, args.threshold)
+    process(prefix=args.prefix, config=args.config, paranoid=args.paranoid, paths=args.paths, threshold=args.threshold)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
