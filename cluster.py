@@ -85,6 +85,10 @@ def process(paths):
     coords2numbers = {}
     # 2-level nested dict of cluster pairs link weights, e.g. cluster_weights['A'] = {'B': 0.95, ...}
     cluster_weights = {}
+    # Same as above, but without duplicate links to other species.
+    weights_clean = {}
+    # Same as cluster_weights, but only for intra-species links.
+    weights_intra = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
 
@@ -190,7 +194,7 @@ def process(paths):
     # Iterate all clusters.
     for c in all_clusters:
         # Iterate each gene in the current cluster.
-        print 'cluster', c
+#        print c,
         if c not in cluster_weights:
             cluster_weights[c] = {}
         s = c[0]
@@ -229,17 +233,11 @@ def process(paths):
         # Iterate each linked cluster.
         for link in all_links:
 #            print 'link', link
-
             # Total number of gene-level links between 'c' and 'link'.
             links_between = 0
             # Number of genes in the 'remote' cluster.
             link_genes = len(cluster2genes[link[0]][link[1]])
             for g, v in gene_links.iteritems():
-#                print 'g'
-#                print g
-#                print 'v'
-#                print v
-#                sys.exit()
                 if link in v:
                     links_between += 1
             # link weight formula:
@@ -258,38 +256,79 @@ def process(paths):
                 print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
             if link in cluster_weights[c]:
                 cluster_weights[c][link] = max(weight, cluster_weights[c][link])
-                print 'this should never happen?'
+                print 'this should never happen'
+                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
             else:
                 cluster_weights[c] = {link: weight}
-        print 'done with', c
-        print
+    print
     print 'Total cluster pair weights calculated: %s' % num_pairs
-    sys.exit()
 
-        # resolve single-species multi-mapping clusters by weight (sp1.a->sp2.b 0.5, sp1.a->sp2.c 0.9, then sp1.a-> sp2.c)
-        #
-        # prune zero-weight links and links below the threshold (default threshold is 0)
-        #
-        # sort DESC from clusters with 11 links down to unique clusters with 0 links
-        #
-        # using cluster products, for each group of same-links clusters output tables for them:
-        # Clusters with 11 links (a total of XXX):
-        # sp1 sp2 sp3 ...
-        # cl1 cl2 cl3 ...
-        # ...
-        #
-        # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
-        # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
-        # we'll show link weights between 55 pairs).
-        # Cluster link weights:
-        #    cl1 cl2 cl3 cl4
-        # cl1 -  0.5 0.6 0.9
-        # cl2     -  0.7 0.5
-        # cl3         -  0.8
-        # cl4             -
-        # Once per species, show a table of intra-species cluster links, with weights;
-        # looks just like the above weights table, but now only clusters from single
-        # species are used.
+
+    print 'Resolving multi-maps to single species by weight, removing self-links.'
+    print '%s initial link seeds' % len(cluster_weights)
+    for c1 in cluster_weights:
+        # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
+        # Group all linked clusters by species.
+        by_species = {}
+        # Populate by-species group.
+        for c2 in cluster_weights[c1]:
+            if c2[0] not in by_species:
+                by_species[c2[0]] = [(cluster_weights[c1][c2], c2)]
+            else:
+                by_species[c2[0]].append((cluster_weights[c1][c2], c2))
+        # Iterate all groups, filling weights_clean and weights_intra.
+#        print by_species
+        for s, v in by_species.iteritems():
+            # Intra.
+            if s == c1[0]:
+                for onec in v:
+                    if c1 in weights_intra:
+                        weights_intra[c1][onec[1]] = onec[0]
+                    else:
+                        weights_intra[c1] = {onec[1]: onec[0]}
+            # Normal case.
+            if len(v) == 1:
+                if c1 in weights_clean:
+                    weights_clean[c1][v[0][1]] = v[0][0]
+                else:
+                    weights_clean[c1] = {v[0][1]: v[0][0]}
+            # Multi-map case.
+            elif len(v) > 1:
+                best = sorted(v)[-1]
+                if c1 in weights_clean:
+                    weights_clean[c1][best[1]] = best[0]
+                else:
+                    weights_clean[c1] = {best[1]: best[0]}
+            else:
+                print 'impossible'
+                sys.exit()
+    print '\t%s self-link seeds separated' % len(weights_intra)
+    print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
+    sys.exit()
+    # TODO: prune links below the threshold (default threshold is 0.0)
+
+
+    print 'Grouping into clusters with 11, 10, ... links.'
+    # sort DESC from clusters with 11 links down to unique clusters with 0 links
+    #
+    # using cluster products, for each group of same-links clusters output tables for them:
+    # Clusters with 11 links (a total of XXX):
+    # sp1 sp2 sp3 ...
+    # cl1 cl2 cl3 ...
+    # ...
+    #
+    # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
+    # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
+    # we'll show link weights between 55 pairs).
+    # Cluster link weights:
+    #    cl1 cl2 cl3 cl4
+    # cl1 -  0.5 0.6 0.9
+    # cl2     -  0.7 0.5
+    # cl3         -  0.8
+    # cl4             -
+    # Once per species, show a table of intra-species cluster links, with weights;
+    # looks just like the above weights table, but now only clusters from single
+    # species are used.
 
 
 
