@@ -109,6 +109,8 @@ def process(paths):
     print '\ttotal lines read:', reader.line_num
     print '\ttotal entries in gene2ortho:', len(gene2ortho)
     print '\ttotal entries in ortho2genes:', len(ortho2genes)
+#    print ortho2genes['4258']
+#    sys.exit()
 
 
     print 'Reading species list file:'
@@ -206,7 +208,8 @@ def process(paths):
 #            print test
 #            print test in ortho2genes
 #            print ortho2genes[test]
-                ortho_genes_wo_g = ortho2genes[gene2ortho[g]]
+                # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
+                ortho_genes_wo_g = ortho2genes[gene2ortho[g]][:]
                 ortho_genes_wo_g.remove(g)
                 for xeno_gene in ortho_genes_wo_g:
                     # Extract LOCUS from gene name, find species from it.
@@ -238,6 +241,8 @@ def process(paths):
             # 1. if links_between/min(c_genes, link_genes) == 1.0, then weight is 1.0
             # 2. otherwise, weight = (links_between/2.0) * ( 1/min(c_genes, link_genes) + 1/max(c_genes, link_genes) )
             weight = float(links_between) / min(c_genes, link_genes)
+            if weight == 0.0:
+                continue
             if weight < 0.9999:
                 print '\tweight', weight
                 weight = 0.5 * links_between * ( 1.0 / min(c_genes, link_genes) + 1.0 / max(c_genes, link_genes) )
