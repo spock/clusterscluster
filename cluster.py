@@ -35,7 +35,7 @@ __date__ = '2013-07-10'
 __updated__ = '2013-07-10'
 
 
-DEBUG = 1
+DEBUG = 0
 TESTRUN = 0
 PROFILE = 0
 
@@ -49,7 +49,7 @@ def parse_cluster_number(note):
     'given a list of items from "note" field, return cluster number'
     for i in note:
         if i.startswith('Cluster number: '):
-            return i[16:]
+            return int(i[16:])
 
 
 def process(paths):
@@ -60,6 +60,7 @@ def process(paths):
     orthofile = paths[2]
     genbanks = paths[3:]
 
+
     # Declare important variables.
     # Mapping of each gene to the clusterID it belongs to.
     gene2ortho = {}
@@ -67,6 +68,8 @@ def process(paths):
     ortho2genes = {}
     # List of recognized species.
     species = []
+    # List of all clusters from all species.
+    all_clusters = []
     # Dict of per-species GenBank records.
     genbank = {}
     # Dict of per-species interval trees of clusters.
@@ -74,6 +77,7 @@ def process(paths):
     # Dict mapping each and all clusters to the list of the genes inside it.
     # ClusterID = (species, cluster number)
     cluster2genes = {}
+
 
     print 'Reading multiparanoid gene clusters:'
     with open(orthofile) as tsv:
@@ -96,46 +100,70 @@ def process(paths):
     print '\ttotal entries in gene2ortho:', len(gene2ortho)
     print '\ttotal entries in ortho2genes:', len(ortho2genes)
 
+
     print 'Reading species list file:'
     for s in open(speciesfile):
         species.append(s.strip())
     print '\ttotal species:', len(species)
 
+
     print 'Reading all genbank files:'
     # Detect which species it is by the first 5 characters.
     # FIXME: needs a better solution.
     for gb in genbanks:
-        s = ''
         for s in species:
             if s[0:5] == gb[0:5]:
                 print '\t%s corresponds to species %s' % (gb, s)
                 break
         genbank[s] = SeqIO.read(gb, "genbank")
     print '\ttotal records parsed:', len(genbank)
-    # XXX: these record require a lot of RAM, so destroy them as soon as possible.
 #    print genbank.keys()
+
 
     # Dict of per-species dicts of cluster-to-gene relations. Here, each cluster
     # dict uses a key = (start, end).
+    print 'Parsing clusters and assigning genes to them:'
     clust2genes_dict = {}
     for s in species:
         clustertrees[s] = IntervalTree()
-        for f in genbank[s]:
+        clust2genes_dict[s] = {}
+        # Populate clusters tree and dict with (start, end) as keys.
+        for f in genbank[s].features:
             if f.type == 'cluster':
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
                 clustertrees[s].add_interval(Interval(start, end))
-                # XXX
-                clust2genes_dict[s] = {(start, end): [f.qualifiers['product'][0], int(parse_cluster_number(f.qualifiers['note']))]}
-        for f in genbank[s]:
+                cluster_number = parse_cluster_number(f.qualifiers['note'])
+                clust2genes_dict[s][(start, end)] = [f.qualifiers['product'][0], cluster_number]
+                all_clusters.append((s, cluster_number))
+#                print '\tadding cluster %s (%s) at (%s, %s)' % (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0], start, end)
+        # Assign genes to each cluster.
+        num_genes = 0
+        for f in genbank[s].features:
             if f.type == 'CDS':
+                # Determine which qualifier type to use for gene name.
                 if 'locus_tag' in f.qualifiers:
                     qualifier = 'locus_tag'
                 elif 'gene' in f.qualifiers:
                     qualifier = 'gene'
+                # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
                 cl = clustertrees[s].find(int(f.location.start.position), int(f.location.end.position))
-                clust2genes_dict[s][(cl.start, cl.end)].append(f.qualifiers[qualifier][0] + '.' + genbank[s].name)
-    # init clusters-to-clusters dict with zero weights:
+                if len(cl) > 0:
+                    # One gene may belong to more than one cluster.
+#                    print 'gene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
+                    num_genes += 1
+                    for cluster in cl:
+                        clust2genes_dict[s][(cluster.start, cluster.end)].append(f.qualifiers[qualifier][0] + '.' + genbank[s].name)
+        print '\t%s: %s clusters populated with %s genes' % (s, len(clust2genes_dict[s]), num_genes)
+    print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
+
+
+    print 'Freeing memory.'
+    del genbank
+    del clustertrees
+
+
+    # Init clusters-to-clusters dict with zero weights:
     # links[clust1] = {clust2:0, clust3:0, ...}
     for s in species:
         for c in s.clusters: # list of all clusters from 11 genomes, ID = (species, number)
@@ -183,15 +211,15 @@ def process(paths):
 
 
 
-class CLIError(Exception):
-    '''Generic exception to raise and log different fatal errors.'''
-    def __init__(self, msg):
-        super(CLIError).__init__(type(self))
-        self.msg = "E: %s" % msg
-    def __str__(self):
-        return self.msg
-    def __unicode__(self):
-        return self.msg
+#class CLIError(Exception):
+#    '''Generic exception to raise and log different fatal errors.'''
+#    def __init__(self, msg):
+#        super(CLIError).__init__(type(self))
+#        self.msg = "E: %s" % msg
+#    def __str__(self):
+#        return self.msg
+#    def __unicode__(self):
+#        return self.msg
 
 
 def main(argv=None): # IGNORE:C0111
@@ -221,20 +249,20 @@ def main(argv=None): # IGNORE:C0111
 USAGE
 ''' % (program_shortdesc, str(__date__))
 
-    try:
+#    try:
         # Setup argument parser
-        parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
+    parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
 #        parser.add_argument("-r", "--recursive", dest="recurse", action="store_true", help="recurse into subfolders [default: %(default)s]")
-        parser.add_argument("-v", "--verbose", dest="verbose", action="count", help="set verbosity level [default: %(default)s]")
+    parser.add_argument("-v", "--verbose", dest="verbose", action="count", help="set verbosity level [default: %(default)s]")
 #        parser.add_argument("-i", "--include", dest="include", help="only include paths matching this regex pattern. Note: exclude is given preference over include. [default: %(default)s]", metavar="RE" )
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
-        parser.add_argument('-V', '--version', action='version', version=program_version_message)
-        parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
+    parser.add_argument('-V', '--version', action='version', version=program_version_message)
+    parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
 
-        # Process arguments
-        args = parser.parse_args()
+    # Process arguments
+    args = parser.parse_args()
 
-        paths = args.paths
+    paths = args.paths
 #        verbose = args.verbose
 #        recurse = args.recurse
 #        inpat = args.include
@@ -253,23 +281,23 @@ USAGE
 #        for inpath in paths:
 #            ### do something with inpath ###
 #            print(inpath)
-        process(paths)
-        return 0
-    except KeyboardInterrupt:
-        ### handle keyboard interrupt ###
-        return 0
-    except Exception, e:
-        if DEBUG or TESTRUN:
-            raise(e)
-        indent = len(program_name) * " "
-        sys.stderr.write(program_name + ": " + repr(e) + "\n")
-        sys.stderr.write(indent + "  for help use --help")
-        return 2
+    process(paths)
+    return 0
+#    except KeyboardInterrupt:
+#        ### handle keyboard interrupt ###
+#        return 0
+#    except Exception, e:
+#        if DEBUG or TESTRUN:
+#            raise(e)
+#        indent = len(program_name) * " "
+#        sys.stderr.write(program_name + ": " + repr(e) + "\n")
+#        sys.stderr.write(indent + "  for help use --help")
+#        return 2
 
 if __name__ == "__main__":
-    if DEBUG:
+#    if DEBUG:
 #        sys.argv.append("-h")
-        sys.argv.append("-v")
+#        sys.argv.append("-v")
 #        sys.argv.append("-r")
     if TESTRUN:
         import doctest
