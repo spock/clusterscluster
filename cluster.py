@@ -1,13 +1,18 @@
 #!/usr/bin/python
 # encoding: utf-8
 '''
-cluster -- shortdesc
+cluster -- finds biosynthetic clusters linked by orthologs in multiple genomes
 
-cluster is a description
+cluster is a tool which processes MultiParanoid/QuickParanoid output for
+multiple genomes, together with the GenBank files of those genomes, and
+calculates "links" between biosynthetic clusters in those genomes. A "link"
+between any two clusters exists, if at least one pair of genes in those
+clusters belong to the same cluster of orthologs. Each link also has a weight
+assigned to it, which tells the fraction of the orthologs between the two clusters.
 
 It defines classes_and_methods
 
-@author:     user_name
+@author:     bogdan
 
 @copyright:  2013 organization_name. All rights reserved.
 
@@ -30,9 +35,9 @@ from bx.intervals.intersection import Interval, IntervalTree
 
 
 __all__ = []
-__version__ = 0.1
+__version__ = 0.2
 __date__ = '2013-07-10'
-__updated__ = '2013-07-10'
+__updated__ = '2013-07-11'
 
 
 DEBUG = 0
@@ -48,7 +53,7 @@ def parse_cluster_number(note):
 
 
 def process(paths, threshold = 0.0):
-    'main method'
+    'main method which does all the work'
     # TODO: check if output file exists to avoid overwriting it.
     outfile = paths[0]
     speciesfile = paths[1]
@@ -117,15 +122,13 @@ def process(paths, threshold = 0.0):
     print '\ttotal lines read:', reader.line_num
     print '\ttotal entries in gene2ortho:', len(gene2ortho)
     print '\ttotal entries in ortho2genes:', len(ortho2genes)
-#    print ortho2genes['4258']
-#    sys.exit()
 
 
     print 'Reading species list file:'
     for s in open(speciesfile):
         species.append(s.strip())
     print '\ttotal species:', len(species)
-    species.sort(key=lambda s: s.lower())
+    species.sort(key = lambda s: s.lower())
 
 
     print 'Reading all genbank files:'
@@ -139,7 +142,6 @@ def process(paths, threshold = 0.0):
         genbank[s] = SeqIO.read(gb, "genbank")
         locus2species[genbank[s].name] = s
     print '\ttotal records parsed:', len(genbank)
-#    print genbank.keys()
 
 
     print 'Parsing clusters and assigning genes to them:'
@@ -184,7 +186,7 @@ def process(paths, threshold = 0.0):
         print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
     print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
     # Sort by species.lower() to ensure stable order of cluster pairs.
-    all_clusters.sort(key=lambda s: s[0].lower())
+    all_clusters.sort(key = lambda s: s[0].lower())
 
 
     print 'Freeing memory.'
@@ -227,11 +229,8 @@ def process(paths, threshold = 0.0):
                         cluster = gene2clusters[xeno_species][xeno_gene]
                         gene_links[g].extend(cluster)
                         all_links.extend(cluster)
-#                        print cluster
-#                        print gene_links[g]
         # Uniquefy all_links.
         all_links = set(all_links)
-#        print all_links
 
 #        print 'Calculating link weights for', c
         c_genes = len(gene_links)
@@ -265,8 +264,12 @@ def process(paths, threshold = 0.0):
                     print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
                     raise
 #                print '\tweight', weight
-#            if weight >= 1.0:
-#                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+            try:
+                assert weight <= 1.0
+            except:
+                print 'weight', weight
+                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+                raise
             if link in cluster_weights[c]:
                 cluster_weights[c][link] = max(weight, cluster_weights[c][link])
                 print 'this should never happen'
@@ -293,8 +296,6 @@ def process(paths, threshold = 0.0):
                 by_species[c2[0]] = []
             by_species[c2[0]].append((cluster_weights[c1][c2], c2))
         # Iterate all groups, filling weights_clean and weights_intra.
-#        if c1 == ('scabiei_87.22.faa', 15):
-#            print 'by_species', by_species
         for s, v in by_species.iteritems():
             # Intra.
             if s == c1[0]:
@@ -313,9 +314,6 @@ def process(paths, threshold = 0.0):
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
                 weights_clean[c1][best[1]] = best[0]
-#        if c1 == ('scabiei_87.22.faa', 15):
-#            print 'intra', weights_intra[c1]
-#            print 'clean', weights_clean[c1]
     print '\t%s self-link seeds separated' % len(weights_intra)
     print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
 
@@ -337,15 +335,24 @@ def process(paths, threshold = 0.0):
             print 'nested', nested_dict
             raise
         by_count[group_len][c1] = nested_dict
+
+
+    del weights_clean
+
+
     print 'Summary:'
     for i in range(len(species), 0, -1):
         print '\t%s: %s groups' % (i, len(by_count[i]))
 
-    # using cluster products, for each group of same-links clusters output tables for them:
+    # Using cluster products, for each group of same-links-count clusters output tables for them:
     # Clusters with 11 links (a total of XXX):
     # sp1 sp2 sp3 ...
     # cl1 cl2 cl3 ...
     # ...
+    for i in range(len(species), 0, -1):
+        if len(by_count[i]) > 0:
+            print 'Groups of size', i
+            pass
 
     # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
     # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
