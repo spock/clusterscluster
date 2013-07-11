@@ -23,6 +23,12 @@ It defines classes_and_methods
 '''
 
 
+# TODO:
+# - calculate "cluster weight" as an average of all link weights
+# - add cluster-level threshold (by cluster weight)
+# - ignore putative clusters
+# - trim clusters on both ends for the length which antismash2 adds "for insurance"
+
 import sys
 import os
 import csv
@@ -51,8 +57,6 @@ class Tee(object):
         self.stdout = sys.stdout
         sys.stdout = self
     def __del__(self):
-        #sys.stdout = self.stdout
-        #self.file.close()
         self.close()
     def write(self, data):
         self.file.write(data)
@@ -74,6 +78,36 @@ def parse_cluster_number(note):
     for i in note:
         if i.startswith('Cluster number: '):
             return int(i[16:])
+
+
+def dedup_clusters(source, target):
+    'removes identical clusters from the supplied "source" dict of dicts, writes unique clusters to "target"'
+    # List of clusters to skip when creating target.
+    skiplist = []
+    for c1, n in source.iteritems():
+        if c1 in skiplist:
+            continue
+        target[c1] = n
+        curclust = [c1]
+        curclust.extend(n.keys())
+        curclust.sort()
+        for sub in n.iterkeys():
+            subflat = [sub]
+            subflat.extend(source[sub].keys())
+            subflat.sort()
+            if subflat == curclust:
+                # Check a single weight (e.g. between c1 and sub), just in case
+                try:
+                    assert source[c1][sub] == source[sub][c1]
+                except:
+                    print 'c1', c1
+                    print 'source', source[c1]
+                    print 'sub', sub
+                    print 'duplicate', source[sub]
+                    raise
+                skiplist.append(sub)
+    print '\tfound and removed', len(set(skiplist)), 'duplicate clusters;'
+    print '\tnow only', len(target), 'seed clusters remain.'
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
@@ -105,8 +139,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     cluster_weights = {}
     # Same as above, but without duplicate links to other species.
     weights_clean = {}
+    # As above, but after removing identical clusters of clusters.
+    weights_dedup = {}
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
+    weights_intra_dedup = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
 
@@ -250,8 +287,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         # Uniquefy all_links.
         all_links = set(all_links)
 
+
 #        print 'Calculating link weights for', c
-        c_genes = len(gene_links)
+        c_genes = len(cluster2genes[c[0]][c[1]])
         # Iterate each linked cluster.
         for link in all_links:
 #            print 'link', link
@@ -266,8 +304,15 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
             # 1. if links_between/min(c_genes, link_genes) == 1.0, then weight is 1.0
             # 2. otherwise, weight = (links_between/2.0) * ( 1/min(c_genes, link_genes) + 1/max(c_genes, link_genes) )
             weight = float(links_between) / max(min(c_genes, link_genes), links_between)
-            if weight == 0.0:
+            #custom = [('avermitilis_MA4680.faa', 21), ('cattleya_DSM46488.faa', 42)]
+            custom = [('coelicolor_A3_2.faa', 34), ('SirexAA_E.faa', 34)]
+            if (link in custom and c in custom):
+                print 'c', c, 'link', link
+                print 'gene_links (c)', c_genes, cluster2genes[c[0]][c[1]]
+                print 'link_genes (link)', link_genes, cluster2genes[link[0]][link[1]]
                 print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+            if weight == 0.0:
+                print 'c', c, 'link', link, 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
                 continue
             num_pairs += 1
             # If c_genes == link_genes, then recalculation will not change anything.
@@ -302,8 +347,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     print 'Total cluster pair weights calculated: %s' % num_pairs
 
 
-    print 'Resolving multi-maps to single species by weight, removing self-links, applying threshold.'
-    print '%s initial link seeds' % len(cluster_weights)
+    print 'Resolving multi-maps to single species by weight, and removing links to self.'
+    print '\t%s initial link seeds' % len(cluster_weights)
     for c1 in cluster_weights.iterkeys():
         # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
         # Group all linked clusters by species.
@@ -336,13 +381,19 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
 
 
+    print 'De-duplicating inter-species clusters:'
+    dedup_clusters(source = weights_clean, target = weights_dedup)
+    print 'De-duplicating intra-species clusters:'
+    dedup_clusters(source = weights_intra, target = weights_intra_dedup)
+
+
     print 'Grouping into clusters with 11, 10, ... links.'
-    # Dict grouping weights_clean by the number of links inside.
+    # Dict grouping weights_dedup by the number of links inside.
     by_count = {}
     # Init.
     for i in range(1, len(species) + 1):
         by_count[i] = {}
-    for c1, nested_dict in weights_clean.iteritems():
+    for c1, nested_dict in weights_dedup.iteritems():
         # +1 for the c1, which is not counted.
         group_len = len(nested_dict) + 1
         try:
@@ -355,7 +406,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         by_count[group_len][c1] = nested_dict
 
 
-    del weights_clean
+    del weights_clean, weights_dedup, weights_intra
 
 
     print 'Summary:'
@@ -375,34 +426,35 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         fname = prefix + '_' + str(i) + '_links.csv'
         print 'Groups of size', i, '(%s)' % len(by_count[i]), 'will be written to file', fname
         # From here on output goes to both stdout and the file.
-        tee = Tee(fname, 'a')
+        #tee = Tee(fname, 'a')
+        tee = open(fname, 'w')
         # Print table header.
         first = True
         for s in species:
             if first:
                 first = False
             else:
-                sys.stdout.write('\t')
-            sys.stdout.write(s)
-        sys.stdout.write('\n')
+                tee.write('\t')
+            tee.write(s)
+        tee.write('\n')
         # Print data rows.
         for c1, nested in by_count[i].iteritems():
             # Map species of the current group to cluster numbers.
             s2c = {}
             s2c[c1[0]] = c1[1]
-            for c2 in nested:
-                s2c[c2[0]] = c2[1]
+            for (s, n) in nested.iterkeys():
+                s2c[s] = n
             first = True
             for s in species:
                 if first:
                     first = False
                 else:
-                    sys.stdout.write('\t')
+                    tee.write('\t')
                 if s in s2c:
-                    sys.stdout.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
-            sys.stdout.write('\n')
+                    tee.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
+            tee.write('\n')
         tee.close()
-        del tee
+#        del tee
 
         # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
         # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
