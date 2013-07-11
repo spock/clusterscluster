@@ -52,14 +52,8 @@ def parse_cluster_number(note):
             return int(i[16:])
 
 
-def process(paths, threshold = 0.0):
+def process(prefix, config, paranoid, paths, threshold = 0.0):
     'main method which does all the work'
-    # TODO: check if output file exists to avoid overwriting it.
-    outfile = paths[0]
-    speciesfile = paths[1]
-    orthofile = paths[2]
-    genbanks = paths[3:]
-
 
     # Declare important variables.
     # Mapping of each gene to the clusterID(s) it belongs to.
@@ -94,7 +88,7 @@ def process(paths, threshold = 0.0):
 
 
     print 'Reading multiparanoid gene clusters:'
-    with open(orthofile) as tsv:
+    with open(paranoid) as tsv:
         # Sample line:
         # 1    avermitilis_MA4680.faa    SAV_1680.BA000030    1    1.000    Kitasatospora_setae_DSM43861.faa-SirexAA_E.faa-albus_J1074.faa-avermitilis_MA4680.faa-cattleya_DSM46488.faa-coelicolor_A3_2.faa-flavogriseus_IAF45CD.faa-griseus_NBRC13350.faa-scabiei_87.22.faa-venezuelae_Shinobu_719.faa-violaceusniger_Tu4113.faa    diff. numbers
         # fieldnames = ['#clusterID', 'species', 'gene', 'is_seed_ortholog', 'confidence', 'species_in_cluster', 'tree_conflict']
@@ -125,7 +119,7 @@ def process(paths, threshold = 0.0):
 
 
     print 'Reading species list file:'
-    for s in open(speciesfile):
+    for s in open(config):
         species.append(s.strip())
     print '\ttotal species:', len(species)
     species.sort(key = lambda s: s.lower())
@@ -134,7 +128,7 @@ def process(paths, threshold = 0.0):
     print 'Reading all genbank files:'
     # Detect which species it is by the first 5 characters.
     # FIXME: needs a better solution.
-    for gb in genbanks:
+    for gb in paths:
         for s in species:
             if s[0:5] == gb[0:5]:
                 print '\t%s corresponds to species %s' % (gb, s)
@@ -344,6 +338,8 @@ def process(paths, threshold = 0.0):
     for i in range(len(species), 0, -1):
         print '\t%s: %s groups' % (i, len(by_count[i]))
 
+    # All output tables have headers, row names, and tab-separated columns.
+
     # Using cluster products, for each group of same-links-count clusters output tables for them:
     # Clusters with 11 links (a total of XXX):
     # sp1 sp2 sp3 ...
@@ -351,23 +347,22 @@ def process(paths, threshold = 0.0):
     # ...
     for i in range(len(species), 0, -1):
         if len(by_count[i]) > 0:
-            print 'Groups of size', i
-            pass
+            print 'Groups of size', i, '(%s)' % len(by_count[i])
+            
 
-    # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
-    # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
-    # we'll show link weights between 55 pairs).
-    # Cluster link weights:
-    #    cl1 cl2 cl3 cl4
-    # cl1 -  0.5 0.6 0.9
-    # cl2     -  0.7 0.5
-    # cl3         -  0.8
-    # cl4             -
+        # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
+        # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
+        # we'll show link weights between 55 pairs).
+        # Cluster link weights:
+        #    cl1 cl2 cl3 cl4
+        # cl1 -  0.5 0.6 0.9
+        # cl2     -  0.7 0.5
+        # cl3         -  0.8
+        # cl4             -
 
-    # Once per species, show a table of intra-species cluster links, with weights;
-    # looks just like the above weights table, but now only clusters from single
-    # species are used.
-
+        # Once per species, show a table of intra-species cluster links, with weights;
+        # looks just like the above weights table, but now only clusters from single
+        # species are used.
 
 
 #class CLIError(Exception):
@@ -416,7 +411,10 @@ USAGE
 #        parser.add_argument("-i", "--include", dest="include", help="only include paths matching this regex pattern. Note: exclude is given preference over include. [default: %(default)s]", metavar="RE" )
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
+    parser.add_argument(dest="prefix", help="output CSV files prefix", metavar="prefix")
+    parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
+    parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
+    parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
 
     # Process arguments
@@ -441,7 +439,7 @@ USAGE
 #        for inpath in paths:
 #            ### do something with inpath ###
 #            print(inpath)
-    process(paths, args.threshold)
+    process(args.prefix, args.config, args.paranoid, args.paths, args.threshold)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
