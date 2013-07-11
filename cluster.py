@@ -45,6 +45,30 @@ TESTRUN = 0
 PROFILE = 0
 
 
+class Tee(object):
+    def __init__(self, name, mode):
+        self.file = open(name, mode)
+        self.stdout = sys.stdout
+        sys.stdout = self
+    def __del__(self):
+        #sys.stdout = self.stdout
+        #self.file.close()
+        self.close()
+    def write(self, data):
+        self.file.write(data)
+        self.stdout.write(data)
+    def flush(self):
+        self.file.flush()
+        self.stdout.flush()
+    def close(self):
+        if self.stdout is not None:
+            sys.stdout = self.stdout
+            self.stdout = None
+        if self.file is not None:
+            self.file.close()
+            self.file = None
+
+
 def parse_cluster_number(note):
     'given a list of items from "note" field, return cluster number'
     for i in note:
@@ -346,9 +370,39 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     # cl1 cl2 cl3 ...
     # ...
     for i in range(len(species), 0, -1):
-        if len(by_count[i]) > 0:
-            print 'Groups of size', i, '(%s)' % len(by_count[i])
-            
+        if len(by_count[i]) == 0:
+            continue
+        fname = prefix + '_' + str(i) + '_links.csv'
+        print 'Groups of size', i, '(%s)' % len(by_count[i]), 'will be written to file', fname
+        # From here on output goes to both stdout and the file.
+        tee = Tee(fname, 'a')
+        # Print table header.
+        first = True
+        for s in species:
+            if first:
+                first = False
+            else:
+                sys.stdout.write('\t')
+            sys.stdout.write(s)
+        sys.stdout.write('\n')
+        # Print data rows.
+        for c1, nested in by_count[i].iteritems():
+            # Map species of the current group to cluster numbers.
+            s2c = {}
+            s2c[c1[0]] = c1[1]
+            for c2 in nested:
+                s2c[c2[0]] = c2[1]
+            first = True
+            for s in species:
+                if first:
+                    first = False
+                else:
+                    sys.stdout.write('\t')
+                if s in s2c:
+                    sys.stdout.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
+            sys.stdout.write('\n')
+        tee.close()
+        del tee
 
         # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
         # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
@@ -411,7 +465,7 @@ USAGE
 #        parser.add_argument("-i", "--include", dest="include", help="only include paths matching this regex pattern. Note: exclude is given preference over include. [default: %(default)s]", metavar="RE" )
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    parser.add_argument("--prefix", default='out_', help="output CSV files prefix [default: %(default)s]")
+    parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
