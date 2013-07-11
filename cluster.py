@@ -400,7 +400,7 @@ USAGE
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
-    parser.add_argument('--threshold', default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
+    parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
 
     # Process arguments
     args = parser.parse_args()
