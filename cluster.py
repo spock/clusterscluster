@@ -79,8 +79,14 @@ def process(paths):
     # Dict of per-species dicts of cluster-to-gene relations.
     # Each cluster dict uses a key = (species, number).
     cluster2genes = {}
+    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
+    gene2clusters = {}
     # Per-species mapping of cluster coordinates tuple to their numbers.
     coords2numbers = {}
+    # 2-level nested dict of cluster pairs link weights, e.g. cluster_weights['A'] = {'B': 0.95, ...}
+    cluster_weights = {}
+    # Mapping of record.names from GenBank files (LOCUS) to species.
+    locus2species = {}
 
 
     print 'Reading multiparanoid gene clusters:'
@@ -121,6 +127,7 @@ def process(paths):
                 print '\t%s corresponds to species %s' % (gb, s)
                 break
         genbank[s] = SeqIO.read(gb, "genbank")
+        locus2species[genbank[s].name] = s
     print '\ttotal records parsed:', len(genbank)
 #    print genbank.keys()
 
@@ -131,6 +138,7 @@ def process(paths):
         cluster2genes[s] = {}
         numbers2products[s] = {}
         coords2numbers[s] = {}
+        gene2clusters[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
         for f in genbank[s].features:
             if f.type == 'cluster':
@@ -147,23 +155,26 @@ def process(paths):
         num_genes = 0
         for f in genbank[s].features:
             if f.type == 'CDS':
-                # Determine which qualifier type to use for gene name.
-                if 'locus_tag' in f.qualifiers:
-                    qualifier = 'locus_tag'
-                elif 'gene' in f.qualifiers:
-                    qualifier = 'gene'
                 # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
                 cl = clustertrees[s].find(int(f.location.start.position), int(f.location.end.position))
                 if len(cl) > 0:
+                    # Determine which qualifier type to use for gene name.
+                    if 'locus_tag' in f.qualifiers:
+                        qualifier = 'locus_tag'
+                    elif 'gene' in f.qualifiers:
+                        qualifier = 'gene'
+                    gene_name = f.qualifiers[qualifier][0] + '.' + genbank[s].name
                     # One gene may belong to more than one cluster.
 #                    print 'gene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
                     num_genes += 1
+                    gene2clusters[s][gene_name] = []
                     for cluster in cl:
-                        cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(f.qualifiers[qualifier][0] + '.' + genbank[s].name)
+                        cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
+                        gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
         print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
     print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
-    # Sort to ensure stable order of cluster pairs.
-    all_clusters.sort(key=lambda s: s.lower())
+    # Sort by species.lower() to ensure stable order of cluster pairs.
+    all_clusters.sort(key=lambda s: s[0].lower())
 
     print 'Freeing memory.'
     del genbank
@@ -171,30 +182,72 @@ def process(paths):
 
 
     print 'Constructing gene-based cluster links. This may take a while.'
+    # Simple counter of the number of cluster pairs we are processing.
+    num_pairs = 0
     # Iterate all clusters.
     for c in all_clusters:
         # Iterate each gene in the current cluster.
         print 'cluster', c
-        for g in cluster2genes[c[0]][c[1]]:
-            print 'gene', g
-            # List of clusters 'g' is linked to.
-            g_map = []
+        if c not in cluster_weights:
+            cluster_weights[c] = {}
+        s = c[0]
+        cluster_number = c[1]
+        # Per-gene lists of linked clusters.
+        gene_links = {}
+        # List of all clusters we have links to. Cannot use set, as clusters come as lists.
+        all_links = []
+        for g in cluster2genes[s][cluster_number]:
+            print '\tgene', g
+            gene_links[g] = []
             # Iterate list of all genes from the g's orthology cluster, except for 'g' itself.
-            for xeno_gene in ortho2genes[gene2ortho[g]].remove(g):
-                g_map.append()
+            if g in gene2ortho:
+#            print g in gene2ortho
+#            test = gene2ortho[g]
+#            print test
+#            print test in ortho2genes
+#            print ortho2genes[test]
+                ortho_genes_wo_g = ortho2genes[gene2ortho[g]]
+                ortho_genes_wo_g.remove(g)
+                for xeno_gene in ortho_genes_wo_g:
+                    # Extract LOCUS from gene name, find species from it.
+                    xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
+                    if xeno_gene in gene2clusters[xeno_species]:
+                        # 'cluster' is a list of clusters
+                        cluster = gene2clusters[xeno_species][xeno_gene]
+                        gene_links[g].append(cluster)
+                        all_links.extend(cluster)
+        # Uniquefy all_links.
+        all_links = set(all_links)
 
-        # weights calculation:
-        # 1. get all clusters we have links to from our current cluster (just a union of all gene->cluster links within current cluster)
-        # 2. iterate each of those linked clusters
-        # 3. for each one, check each gene of the current cluster to see if it has a link out; increment counter if yes
-        # 4. calculate weight for this link.
-        #
-        # link weight formula:
-        # 1. if num_links/min(num_genes_cl1, num_genes_cl2) == 1.0, then weight is 1.0
-        # 2. otherwise, weight = (num_links/2) * ( 1/min(num_genes_cl1, num_genes_cl2) + 1/max(num_genes_cl1, num_genes_cl2) )
-        #
-        # map of 'c' to other clusters, with weights
-        #
+        print 'Calculating link weights for', c
+        c_genes = len(gene_links)
+        # Iterate each linked cluster.
+        for link in all_links:
+            # Skip, if this link already has a weight assigned (link weight is supposed to be symmetric).
+            if link in cluster_weights[c]:
+                continue
+            num_pairs += 1
+            # Total number of gene-level links between 'c' and 'link'.
+            links_between = 0
+            # Number of genes in the 'remote' cluster.
+            link_genes = len(cluster2genes[link[0]][link[1]])
+            for g, v in gene_links.iteritems():
+                if link in v:
+                    links_between += 1
+            # link weight formula:
+            # 1. if links_between/min(c_genes, link_genes) == 1.0, then weight is 1.0
+            # 2. otherwise, weight = (links_between/2.0) * ( 1/min(c_genes, link_genes) + 1/max(c_genes, link_genes) )
+            weight = float(links_between) / min(c_genes, link_genes)
+            if weight < 0.9999:
+                print '\tweight', weight
+                weight = 0.5 * links_between * ( 1.0 / min(c_genes, link_genes) + 1.0 / max(c_genes, link_genes) )
+                print '\tweight', weight
+            cluster_weights[c] = {link: weight}
+        print 'done with', c
+        print
+    print 'Total cluster pair weights calculated: %s' % num_pairs
+    sys.exit()
+
         # resolve single-species multi-mapping clusters by weight (sp1.a->sp2.b 0.5, sp1.a->sp2.c 0.9, then sp1.a-> sp2.c)
         #
         # prune zero-weight links and links below the threshold (default threshold is 0)
