@@ -178,12 +178,13 @@ def process(paths):
     # Sort by species.lower() to ensure stable order of cluster pairs.
     all_clusters.sort(key=lambda s: s[0].lower())
 
+
     print 'Freeing memory.'
     del genbank
     del clustertrees
 
 
-    print 'Constructing gene-based cluster links. This may take a while.'
+    print 'Constructing gene-based cluster links.'
     # Simple counter of the number of cluster pairs we are processing.
     num_pairs = 0
     # Iterate all clusters.
@@ -199,55 +200,67 @@ def process(paths):
         # List of all clusters we have links to. Cannot use set, as clusters come as lists.
         all_links = []
         for g in cluster2genes[s][cluster_number]:
-            print '\tgene', g
-            gene_links[g] = []
             # Iterate list of all genes from the g's orthology cluster, except for 'g' itself.
-            if g in gene2ortho:
-#            print g in gene2ortho
-#            test = gene2ortho[g]
-#            print test
-#            print test in ortho2genes
-#            print ortho2genes[test]
-                # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
-                ortho_genes_wo_g = ortho2genes[gene2ortho[g]][:]
-                ortho_genes_wo_g.remove(g)
-                for xeno_gene in ortho_genes_wo_g:
-                    # Extract LOCUS from gene name, find species from it.
-                    xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
-                    if xeno_gene in gene2clusters[xeno_species]:
-                        # 'cluster' is a list of clusters
-                        cluster = gene2clusters[xeno_species][xeno_gene]
-                        gene_links[g].append(cluster)
-                        all_links.extend(cluster)
+            if g not in gene2ortho:
+                continue
+#            print '\tgene', g
+            gene_links[g] = []
+            # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
+            ortho_genes_wo_g = ortho2genes[gene2ortho[g]][:]
+            ortho_genes_wo_g.remove(g)
+#            print 'ortho_genes_wo_g', ortho_genes_wo_g
+            for xeno_gene in ortho_genes_wo_g:
+                # Extract LOCUS from gene name, find species from it.
+                xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
+#                print 'xeno gene and species:', xeno_gene, xeno_species
+                if xeno_gene in gene2clusters[xeno_species]:
+                    # 'cluster' is a list of clusters
+                    cluster = gene2clusters[xeno_species][xeno_gene]
+                    gene_links[g].extend(cluster)
+                    all_links.extend(cluster)
+#                    print cluster
+#                    print gene_links[g]
         # Uniquefy all_links.
         all_links = set(all_links)
+#        print all_links
 
-        print 'Calculating link weights for', c
+#        print 'Calculating link weights for', c
         c_genes = len(gene_links)
         # Iterate each linked cluster.
         for link in all_links:
-            # Skip, if this link already has a weight assigned (link weight is supposed to be symmetric).
-            if link in cluster_weights[c]:
-                continue
-            num_pairs += 1
+#            print 'link', link
+
             # Total number of gene-level links between 'c' and 'link'.
             links_between = 0
             # Number of genes in the 'remote' cluster.
             link_genes = len(cluster2genes[link[0]][link[1]])
             for g, v in gene_links.iteritems():
+#                print 'g'
+#                print g
+#                print 'v'
+#                print v
+#                sys.exit()
                 if link in v:
                     links_between += 1
             # link weight formula:
             # 1. if links_between/min(c_genes, link_genes) == 1.0, then weight is 1.0
             # 2. otherwise, weight = (links_between/2.0) * ( 1/min(c_genes, link_genes) + 1/max(c_genes, link_genes) )
-            weight = float(links_between) / min(c_genes, link_genes)
+            weight = float(links_between) / max(min(c_genes, link_genes), links_between)
             if weight == 0.0:
+                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
                 continue
+            num_pairs += 1
             if weight < 0.9999:
-                print '\tweight', weight
+#                print '\tweight', weight
                 weight = 0.5 * links_between * ( 1.0 / min(c_genes, link_genes) + 1.0 / max(c_genes, link_genes) )
-                print '\tweight', weight
-            cluster_weights[c] = {link: weight}
+#                print '\tweight', weight
+            if weight > 1.0:
+                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+            if link in cluster_weights[c]:
+                cluster_weights[c][link] = max(weight, cluster_weights[c][link])
+                print 'this should never happen?'
+            else:
+                cluster_weights[c] = {link: weight}
         print 'done with', c
         print
     print 'Total cluster pair weights calculated: %s' % num_pairs
