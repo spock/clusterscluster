@@ -57,7 +57,7 @@ def process(paths, threshold = 0.0):
 
 
     # Declare important variables.
-    # Mapping of each gene to the clusterID it belongs to.
+    # Mapping of each gene to the clusterID(s) it belongs to.
     gene2ortho = {}
     # List of all the genes in the cluster with given clusterID.
     ortho2genes = {}
@@ -96,13 +96,22 @@ def process(paths, threshold = 0.0):
         reader = csv.DictReader(tsv, delimiter = '\t')
         try:
             for row in reader:
-                # Build gene-to-cluster-ID dict
-                gene2ortho[row['gene']] = row['#clusterID']
-                # Build cluster-ID-to-all-genes dict of lists.
-                if row['#clusterID'] in ortho2genes:
-                    ortho2genes[row['#clusterID']].append(row['gene'])
+                # Understand both Multi- and Quick-paranoid files.
+                if '#clusterID' in row:
+                    # QuickParanoid
+                    idname = '#clusterID'
                 else:
-                    ortho2genes[row['#clusterID']] = [row['gene']]
+                    # MultiParanoid
+                    idname = 'clusterID'
+                # Build gene-to-cluster-ID(s) dict
+                if row['gene'] not in gene2ortho:
+                    gene2ortho[row['gene']] = []
+                gene2ortho[row['gene']].append(row[idname])
+                # Build cluster-ID-to-all-genes dict of lists.
+                if row[idname] in ortho2genes:
+                    ortho2genes[row[idname]].append(row['gene'])
+                else:
+                    ortho2genes[row[idname]] = [row['gene']]
         except csv.Error as e:
             sys.exit('file %s, line %d: %s' % (orthofile, reader.line_num, e))
     print '\ttotal lines read:', reader.line_num
@@ -204,21 +213,22 @@ def process(paths, threshold = 0.0):
                 continue
 #            print '\tgene', g
             gene_links[g] = []
-            # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
-            ortho_genes_wo_g = ortho2genes[gene2ortho[g]][:]
-            ortho_genes_wo_g.remove(g)
-#            print 'ortho_genes_wo_g', ortho_genes_wo_g
-            for xeno_gene in ortho_genes_wo_g:
-                # Extract LOCUS from gene name, find species from it.
-                xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
-#                print 'xeno gene and species:', xeno_gene, xeno_species
-                if xeno_gene in gene2clusters[xeno_species]:
-                    # 'cluster' is a list of clusters
-                    cluster = gene2clusters[xeno_species][xeno_gene]
-                    gene_links[g].extend(cluster)
-                    all_links.extend(cluster)
-#                    print cluster
-#                    print gene_links[g]
+            for orthoclust in gene2ortho[g]:
+                # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
+                ortho_genes_wo_g = ortho2genes[orthoclust][:]
+                ortho_genes_wo_g.remove(g)
+#                print 'ortho_genes_wo_g', ortho_genes_wo_g
+                for xeno_gene in ortho_genes_wo_g:
+                    # Extract LOCUS from gene name, find species from it.
+                    xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
+#                    print 'xeno gene and species:', xeno_gene, xeno_species
+                    if xeno_gene in gene2clusters[xeno_species]:
+                        # 'cluster' is a list of clusters
+                        cluster = gene2clusters[xeno_species][xeno_gene]
+                        gene_links[g].extend(cluster)
+                        all_links.extend(cluster)
+#                        print cluster
+#                        print gene_links[g]
         # Uniquefy all_links.
         all_links = set(all_links)
 #        print all_links
