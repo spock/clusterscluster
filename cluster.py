@@ -70,13 +70,17 @@ def process(paths):
     species = []
     # List of all clusters from all species.
     all_clusters = []
+    # Map of per-species cluster numbers to their products
+    numbers2products = {}
     # Dict of per-species GenBank records.
     genbank = {}
     # Dict of per-species interval trees of clusters.
     clustertrees = {}
-    # Dict mapping each and all clusters to the list of the genes inside it.
-    # ClusterID = (species, cluster number)
+    # Dict of per-species dicts of cluster-to-gene relations.
+    # Each cluster dict uses a key = (species, number).
     cluster2genes = {}
+    # Per-species mapping of cluster coordinates tuple to their numbers.
+    coords2numbers = {}
 
 
     print 'Reading multiparanoid gene clusters:'
@@ -105,6 +109,7 @@ def process(paths):
     for s in open(speciesfile):
         species.append(s.strip())
     print '\ttotal species:', len(species)
+    species.sort(key=lambda s: s.lower())
 
 
     print 'Reading all genbank files:'
@@ -120,13 +125,12 @@ def process(paths):
 #    print genbank.keys()
 
 
-    # Dict of per-species dicts of cluster-to-gene relations. Here, each cluster
-    # dict uses a key = (start, end).
     print 'Parsing clusters and assigning genes to them:'
-    clust2genes_dict = {}
     for s in species:
         clustertrees[s] = IntervalTree()
-        clust2genes_dict[s] = {}
+        cluster2genes[s] = {}
+        numbers2products[s] = {}
+        coords2numbers[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
         for f in genbank[s].features:
             if f.type == 'cluster':
@@ -134,9 +138,11 @@ def process(paths):
                 end = int(f.location.end.position)
                 clustertrees[s].add_interval(Interval(start, end))
                 cluster_number = parse_cluster_number(f.qualifiers['note'])
-                clust2genes_dict[s][(start, end)] = [f.qualifiers['product'][0], cluster_number]
+                cluster2genes[s][cluster_number] = []
                 all_clusters.append((s, cluster_number))
-#                print '\tadding cluster %s (%s) at (%s, %s)' % (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0], start, end)
+                numbers2products[s][cluster_number] = f.qualifiers['product'][0]
+                coords2numbers[s][(start, end)] = cluster_number
+#                print '\tadding cluster %s (%s) at (%s, %s)' % (cluster_number, f.qualifiers['product'][0], start, end)
         # Assign genes to each cluster.
         num_genes = 0
         for f in genbank[s].features:
@@ -153,61 +159,66 @@ def process(paths):
 #                    print 'gene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
                     num_genes += 1
                     for cluster in cl:
-                        clust2genes_dict[s][(cluster.start, cluster.end)].append(f.qualifiers[qualifier][0] + '.' + genbank[s].name)
-        print '\t%s: %s clusters populated with %s genes' % (s, len(clust2genes_dict[s]), num_genes)
+                        cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(f.qualifiers[qualifier][0] + '.' + genbank[s].name)
+        print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
     print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
-
+    # Sort to ensure stable order of cluster pairs.
+    all_clusters.sort(key=lambda s: s.lower())
 
     print 'Freeing memory.'
     del genbank
     del clustertrees
 
 
-    # Init clusters-to-clusters dict with zero weights:
-    # links[clust1] = {clust2:0, clust3:0, ...}
-    for s in species:
-        for c in s.clusters: # list of all clusters from 11 genomes, ID = (species, number)
-            for g in c.genes: # list of all genes in he cluster
-                orthoclustnum = find_ortho_cluster(g)
-                other_genes = get_genes_from_cluster(orthoclustnum, exceptfor = g)
-                other_clusters = map_each_gene_to_cluster(other_genes)
-                # map of 'g' to other clusters
-            # weights calculation:
-            # 1. get all clusters we have links to from our current cluster (just a union of all gene->cluster links within current cluster)
-            # 2. iterate each of those linked clusters
-            # 3. for each one, check each gene of the current cluster to see if it has a link out; increment counter if yes
-            # 4. calculate weight for this link.
-            #
-            # link weight formula:
-            # 1. if num_links/min(num_genes_cl1, num_genes_cl2) == 1.0, then weight is 1.0
-            # 2. otherwise, weight = (num_links/2) * ( 1/min(num_genes_cl1, num_genes_cl2) + 1/max(num_genes_cl1, num_genes_cl2) )
-            #
-            # map of 'c' to other clusters, with weights
-            #
-            # resolve single-species multi-mapping clusters by weight (sp1.a->sp2.b 0.5, sp1.a->sp2.c 0.9, then sp1.a-> sp2.c)
-            #
-            # prune zero-weight links and links below the threshold (default threshold is 0)
-            #
-            # sort DESC from clusters with 11 links down to unique clusters with 0 links
-            #
-            # using cluster products, for each group of same-links clusters output tables for them:
-            # Clusters with 11 links (a total of XXX):
-            # sp1 sp2 sp3 ...
-            # cl1 cl2 cl3 ...
-            # ...
-            #
-            # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
-            # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
-            # we'll show link weights between 55 pairs).
-            # Cluster link weights:
-            #    cl1 cl2 cl3 cl4
-            # cl1 -  0.5 0.6 0.9
-            # cl2     -  0.7 0.5
-            # cl3         -  0.8
-            # cl4             -
-            # Once per species, show a table of intra-species cluster links, with weights;
-            # looks just like the above weights table, but now only clusters from single
-            # species are used.
+    print 'Constructing gene-based cluster links. This may take a while.'
+    # Iterate all clusters.
+    for c in all_clusters:
+        # Iterate each gene in the current cluster.
+        print 'cluster', c
+        for g in cluster2genes[c[0]][c[1]]:
+            print 'gene', g
+            # List of clusters 'g' is linked to.
+            g_map = []
+            # Iterate list of all genes from the g's orthology cluster, except for 'g' itself.
+            for xeno_gene in ortho2genes[gene2ortho[g]].remove(g):
+                g_map.append()
+
+        # weights calculation:
+        # 1. get all clusters we have links to from our current cluster (just a union of all gene->cluster links within current cluster)
+        # 2. iterate each of those linked clusters
+        # 3. for each one, check each gene of the current cluster to see if it has a link out; increment counter if yes
+        # 4. calculate weight for this link.
+        #
+        # link weight formula:
+        # 1. if num_links/min(num_genes_cl1, num_genes_cl2) == 1.0, then weight is 1.0
+        # 2. otherwise, weight = (num_links/2) * ( 1/min(num_genes_cl1, num_genes_cl2) + 1/max(num_genes_cl1, num_genes_cl2) )
+        #
+        # map of 'c' to other clusters, with weights
+        #
+        # resolve single-species multi-mapping clusters by weight (sp1.a->sp2.b 0.5, sp1.a->sp2.c 0.9, then sp1.a-> sp2.c)
+        #
+        # prune zero-weight links and links below the threshold (default threshold is 0)
+        #
+        # sort DESC from clusters with 11 links down to unique clusters with 0 links
+        #
+        # using cluster products, for each group of same-links clusters output tables for them:
+        # Clusters with 11 links (a total of XXX):
+        # sp1 sp2 sp3 ...
+        # cl1 cl2 cl3 ...
+        # ...
+        #
+        # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
+        # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
+        # we'll show link weights between 55 pairs).
+        # Cluster link weights:
+        #    cl1 cl2 cl3 cl4
+        # cl1 -  0.5 0.6 0.9
+        # cl2     -  0.7 0.5
+        # cl3         -  0.8
+        # cl4             -
+        # Once per species, show a table of intra-species cluster links, with weights;
+        # looks just like the above weights table, but now only clusters from single
+        # species are used.
 
 
 
