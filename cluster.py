@@ -40,14 +40,6 @@ TESTRUN = 0
 PROFILE = 0
 
 
-
-
-
-def find_ortho_cluster(g):
-    'returns the number of the cluster, to which gene "g" belongs'
-    return
-
-
 def parse_cluster_number(note):
     'given a list of items from "note" field, return cluster number'
     for i in note:
@@ -55,7 +47,7 @@ def parse_cluster_number(note):
             return int(i[16:])
 
 
-def process(paths):
+def process(paths, threshold = 0.0):
     'main method'
     # TODO: check if output file exists to avoid overwriting it.
     outfile = paths[0]
@@ -251,25 +243,35 @@ def process(paths):
                 print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
                 continue
             num_pairs += 1
-            if weight < 0.9999:
+            # If c_genes == link_genes, then recalculation will not change anything.
+            if weight < 0.9999 and c_genes != link_genes:
 #                print '\tweight', weight
+                weight_old = weight
                 weight = 0.5 * links_between * ( 1.0 / min(c_genes, link_genes) + 1.0 / max(c_genes, link_genes) )
+                try:
+                    assert weight < weight_old
+                except:
+                    print 'old', weight_old, 'new', weight
+                    print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+                    raise
 #                print '\tweight', weight
-            if weight > 1.0:
-                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+#            if weight >= 1.0:
+#                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
             if link in cluster_weights[c]:
                 cluster_weights[c][link] = max(weight, cluster_weights[c][link])
                 print 'this should never happen'
                 print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+                sys.exit()
             else:
-                cluster_weights[c][link] = weight
+                if weight >= threshold:
+                    cluster_weights[c][link] = weight
         if len(cluster_weights[c]) == 0:
             del cluster_weights[c]
     print
     print 'Total cluster pair weights calculated: %s' % num_pairs
 
 
-    print 'Resolving multi-maps to single species by weight, removing self-links.'
+    print 'Resolving multi-maps to single species by weight, removing self-links, applying threshold.'
     print '%s initial link seeds' % len(cluster_weights)
     for c1 in cluster_weights.iterkeys():
         # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
@@ -281,8 +283,8 @@ def process(paths):
                 by_species[c2[0]] = []
             by_species[c2[0]].append((cluster_weights[c1][c2], c2))
         # Iterate all groups, filling weights_clean and weights_intra.
-        if c1 == ('scabiei_87.22.faa', 15):
-            print 'by_species', by_species
+#        if c1 == ('scabiei_87.22.faa', 15):
+#            print 'by_species', by_species
         for s, v in by_species.iteritems():
             # Intra.
             if s == c1[0]:
@@ -301,17 +303,11 @@ def process(paths):
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
                 weights_clean[c1][best[1]] = best[0]
-            else:
-                print 'impossible'
-                sys.exit()
-        if c1 == ('scabiei_87.22.faa', 15):
-            print 'intra', weights_intra[c1]
-            print 'clean', weights_clean[c1]
+#        if c1 == ('scabiei_87.22.faa', 15):
+#            print 'intra', weights_intra[c1]
+#            print 'clean', weights_clean[c1]
     print '\t%s self-link seeds separated' % len(weights_intra)
     print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
-
-
-    # TODO: prune links below the threshold (default threshold is 0.0)
 
 
     print 'Grouping into clusters with 11, 10, ... links.'
@@ -404,7 +400,7 @@ USAGE
 #        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument(dest="paths", help="paths to input files: out.txt config multiparanoid.txt 1.gb 2.gb ..", metavar="path", nargs='+')
-    parser.add_argument(--threshold, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
+    parser.add_argument('--threshold', default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
 
     # Process arguments
     args = parser.parse_args()
@@ -428,7 +424,7 @@ USAGE
 #        for inpath in paths:
 #            ### do something with inpath ###
 #            print(inpath)
-    process(paths)
+    process(paths, args.threshold)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
