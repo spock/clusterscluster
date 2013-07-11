@@ -84,6 +84,11 @@ def dedup_clusters(source, target):
     'removes identical clusters from the supplied "source" dict of dicts, writes unique clusters to "target"'
     # List of clusters to skip when creating target.
     skiplist = []
+    # FIXME: counter of different weights. Must fix different weights.
+    weights_differ = 0
+    total_weight_diffs = 0.0
+    min_diff = 1.0
+    max_diff = 0.0
     for c1, n in source.iteritems():
         if c1 in skiplist:
             continue
@@ -100,14 +105,21 @@ def dedup_clusters(source, target):
                 try:
                     assert source[c1][sub] == source[sub][c1]
                 except:
-                    print 'c1', c1
-                    print 'source', source[c1]
-                    print 'sub', sub
-                    print 'duplicate', source[sub]
-                    raise
+                    weights_differ += 1
+                    delta = abs(source[sub][c1] - source[c1][sub])
+                    total_weight_diffs += delta
+                    min_diff = min(min_diff, delta)
+                    max_diff = max(max_diff, delta)
+                    # FIXME
+#                    print 'c1', c1
+#                    print 'source', source[c1]
+#                    print 'sub', sub
+#                    print 'duplicate', source[sub]
+#                    raise
                 skiplist.append(sub)
     print '\tfound and removed', len(set(skiplist)), 'duplicate clusters;'
     print '\tnow only', len(target), 'seed clusters remain.'
+    print '\tfound %s differing weights; min/avg/max differences are %s, %s, %s.' % (weights_differ, min_diff, total_weight_diffs / weights_differ, max_diff)
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
@@ -265,25 +277,27 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         # List of all clusters we have links to. Cannot use set, as clusters come as lists.
         all_links = []
         for g in cluster2genes[s][cluster_number]:
-            # Iterate list of all genes from the g's orthology cluster, except for 'g' itself.
+            # Iterate list of all genes from the g's orthology cluster, *including* 'g' itself - w/o it we lose 1 link.
             if g not in gene2ortho:
                 continue
 #            print '\tgene', g
             gene_links[g] = []
             for orthoclust in gene2ortho[g]:
                 # Here, *must* create a copy by slicing, as otherwise genes are removed from ortho2genes.
-                ortho_genes_wo_g = ortho2genes[orthoclust][:]
-                ortho_genes_wo_g.remove(g)
+                ortho_genes = ortho2genes[orthoclust][:]
+#                ortho_genes.remove(g)
 #                print 'ortho_genes_wo_g', ortho_genes_wo_g
-                for xeno_gene in ortho_genes_wo_g:
+                for xeno_gene in ortho_genes:
                     # Extract LOCUS from gene name, find species from it.
                     xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
 #                    print 'xeno gene and species:', xeno_gene, xeno_species
                     if xeno_gene in gene2clusters[xeno_species]:
                         # 'cluster' is a list of clusters
                         cluster = gene2clusters[xeno_species][xeno_gene]
-                        gene_links[g].extend(cluster)
-                        all_links.extend(cluster)
+                        for clust in cluster:
+                            if clust != c:
+                                gene_links[g].append(clust)
+                                all_links.append(clust)
         # Uniquefy all_links.
         all_links = set(all_links)
 
@@ -297,7 +311,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
             links_between = 0
             # Number of genes in the 'remote' cluster.
             link_genes = len(cluster2genes[link[0]][link[1]])
-            for g, v in gene_links.iteritems():
+            for v in gene_links.itervalues():
                 if link in v:
                     links_between += 1
             # link weight formula:
@@ -305,12 +319,12 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
             # 2. otherwise, weight = (links_between/2.0) * ( 1/min(c_genes, link_genes) + 1/max(c_genes, link_genes) )
             weight = float(links_between) / max(min(c_genes, link_genes), links_between)
             #custom = [('avermitilis_MA4680.faa', 21), ('cattleya_DSM46488.faa', 42)]
-            custom = [('coelicolor_A3_2.faa', 34), ('SirexAA_E.faa', 34)]
-            if (link in custom and c in custom):
-                print 'c', c, 'link', link
-                print 'gene_links (c)', c_genes, cluster2genes[c[0]][c[1]]
-                print 'link_genes (link)', link_genes, cluster2genes[link[0]][link[1]]
-                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
+#            custom = [('coelicolor_A3_2.faa', 34), ('SirexAA_E.faa', 34)]
+#            if (link in custom and c in custom):
+#                print 'c', c, 'link', link
+#                print 'c_genes (c)', c_genes, cluster2genes[c[0]][c[1]]
+#                print 'link_genes (link)', link_genes, cluster2genes[link[0]][link[1]]
+#                print 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
             if weight == 0.0:
                 print 'c', c, 'link', link, 'links_between', links_between, 'c_genes', c_genes, 'link_genes', link_genes
                 continue
