@@ -73,11 +73,35 @@ class Tee(object):
             self.file = None
 
 
+def print_cluster_numbers_row(s2c, species, tee):
+    first = True
+    for s in species:
+        if first:
+            first = False
+        else:
+            tee.write('\t')
+        if s in s2c:
+            tee.write(str(s2c[s]))
+    tee.write('\n')
+
+
 def parse_cluster_number(note):
     'given a list of items from "note" field, return cluster number'
     for i in note:
         if i.startswith('Cluster number: '):
             return int(i[16:])
+
+
+def print_species_header(species, tee):
+    'Print table header.'
+    first = True
+    for s in species:
+        if first:
+            first = False
+        else:
+            tee.write('\t')
+        tee.write(s)
+    tee.write('\n')
 
 
 def dedup_clusters(source, target):
@@ -97,6 +121,8 @@ def dedup_clusters(source, target):
         curclust.extend(n.keys())
         curclust.sort()
         for sub in n.iterkeys():
+            if sub not in source:
+                continue
             subflat = [sub]
             subflat.extend(source[sub].keys())
             subflat.sort()
@@ -420,7 +446,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         by_count[group_len][c1] = nested_dict
 
 
-    del weights_clean, weights_dedup, weights_intra
+    #del weights_clean, weights_dedup, weights_intra
 
 
     print 'Summary:'
@@ -442,16 +468,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         # From here on output goes to both stdout and the file.
         #tee = Tee(fname, 'a')
         tee = open(fname, 'w')
-        # Print table header.
-        first = True
-        for s in species:
-            if first:
-                first = False
-            else:
-                tee.write('\t')
-            tee.write(s)
-        tee.write('\n')
+        print_species_header(species, tee)
         # Print data rows.
+        group_s2c = {}
         for c1, nested in by_count[i].iteritems():
             # Map species of the current group to cluster numbers.
             s2c = {}
@@ -467,18 +486,50 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
                 if s in s2c:
                     tee.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
             tee.write('\n')
-        tee.close()
-#        del tee
-
-        # After each such table, output a diagonal matrix of link weights between all possible cluster pairs.
-        # This is done for the entire set of clusters from the summary table (so with 1 row of 11-linked clusters,
-        # we'll show link weights between 55 pairs).
+            group_s2c[c1] = s2c
+        # After each such table, output a diagonal matrix of link weights between all
+        # possible cluster pairs in each of the groups above.
         # Cluster link weights:
         #    cl1 cl2 cl3 cl4
         # cl1 -  0.5 0.6 0.9
         # cl2     -  0.7 0.5
         # cl3         -  0.8
         # cl4             -
+        tee.write('\nCluster pairs link weights\n')
+        for c1, nested in by_count[i].iteritems():
+            print_species_header(species, tee)
+            print_cluster_numbers_row(group_s2c[c1], species, tee)
+            # Keep track of numbers already shown in the 1st column.
+            printed = []
+            for s_r in species[:]:
+                printed.append(s_r)
+                if s_r not in group_s2c[c1]:
+                    # Do not print entirely empty rows.
+                    continue
+                # Print cluster number in the 1st column.
+                tee.write(str(group_s2c[c1][s_r]))
+                first = True
+                for s_c in species[:]:
+                    if first:
+                        # Skip firstmost record entirely.
+                        first = False
+                        continue
+                    tee.write('\t')
+                    if s_c in printed:
+                        # Don't print the lower diagonal of values.
+                        continue
+                    # Find an existing link.
+                    row_key = (s_r, group_s2c[c1][s_r])
+                    col_key = (s_c, group_s2c[c1][s_c])
+                    if row_key in by_count[i]:
+                        tee.write(round(by_count[i][row_key][col_key], 2))
+                    elif col_key in by_count[i]:
+                        tee.write(round(by_count[i][col_key][row_key], 2))
+                    else:
+                        print 'Neither', row_key, 'nor', col_key, 'found in cluster_weights.'
+                tee.write('\n')
+        tee.close()
+#        del tee
 
         # Once per species, show a table of intra-species cluster links, with weights;
         # looks just like the above weights table, but now only clusters from single
