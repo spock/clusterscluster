@@ -26,8 +26,9 @@ It defines classes_and_methods
 # TODO:
 # - calculate "cluster weight" as an average of all link weights
 # - add cluster-level threshold (by cluster weight)
-# - ignore putative clusters
+# - add an option to ignore putative clusters
 # - trim clusters on both ends for the length which antismash2 adds "for insurance"
+
 
 import sys
 import os
@@ -41,17 +42,19 @@ from bx.intervals.intersection import Interval, IntervalTree
 
 
 __all__ = []
-__version__ = 0.2
+__version__ = 0.3
 __date__ = '2013-07-10'
-__updated__ = '2013-07-11'
+__updated__ = '2013-07-15'
 
 
 DEBUG = 0
 TESTRUN = 0
 PROFILE = 0
+verbose = 0
 
 
 class Tee(object):
+    '''Write to both sys.stdout and provided file/mode, just like shell's "tee" command.'''
     def __init__(self, name, mode):
         self.file = open(name, mode)
         self.stdout = sys.stdout
@@ -108,7 +111,7 @@ def dedup_clusters(source, target):
     'removes identical clusters from the supplied "source" dict of dicts, writes unique clusters to "target"'
     # List of clusters to skip when creating target.
     skiplist = []
-    # FIXME: counter of different weights. Must fix different weights.
+    # FIXME: counter of different weights. Must fix different weights, not count them.
     weights_differ = 0
     total_weight_diffs = 0.0
     min_diff = 1.0
@@ -149,7 +152,11 @@ def dedup_clusters(source, target):
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
-    'main method which does all the work'
+    '''Main method which does all the work.
+    "paranoid" is the path to multi/quick-paranoid output file.
+    "paths" is a list of paths to genbank files we want to compare.
+    "threshold" is a biocluster-biocluster link weight threshold.
+    "prefix" is prepended to all output files.'''
 
     # Declare important variables.
     # Mapping of each gene to the clusterID(s) it belongs to.
@@ -574,13 +581,9 @@ def main(argv=None): # IGNORE:C0111
 USAGE
 ''' % (program_shortdesc, str(__date__))
 
-#    try:
-        # Setup argument parser
     parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
-#        parser.add_argument("-r", "--recursive", dest="recurse", action="store_true", help="recurse into subfolders [default: %(default)s]")
-    parser.add_argument("-v", "--verbose", dest="verbose", action="count", help="set verbosity level [default: %(default)s]")
-#        parser.add_argument("-i", "--include", dest="include", help="only include paths matching this regex pattern. Note: exclude is given preference over include. [default: %(default)s]", metavar="RE" )
-#        parser.add_argument("-e", "--exclude", dest="exclude", help="exclude paths matching this regex pattern. [default: %(default)s]", metavar="RE" )
+    parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up to -vvv [default: %(default)s]")
+    parser.add_argument("-d", "--debug", dest="DEBUG", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
@@ -591,25 +594,16 @@ USAGE
     # Process arguments
     args = parser.parse_args()
 
-    paths = args.paths
-#        verbose = args.verbose
-#        recurse = args.recurse
-#        inpat = args.include
-#        expat = args.exclude
-
-#        if verbose > 0:
-#            print("Verbose mode on")
-#            if recurse:
-#                print("Recursive mode on")
-#            else:
-#                print("Recursive mode off")
-
-#        if inpat and expat and inpat == expat:
-#            raise CLIError("include and exclude pattern are equal! Nothing will be processed.")
-
-#        for inpath in paths:
-#            ### do something with inpath ###
-#            print(inpath)
+    verbose = args.verbose
+    DEBUG = args.debug
+#    recurse = args.recurse
+#    inpat = args.include
+#    expat = args.exclude
+#    if inpat and expat and inpat == expat:
+#        raise CLIError("include and exclude pattern are equal! Nothing will be processed.")
+#    for inpath in paths:
+#        ### do something with inpath ###
+#        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid, paths=args.paths, threshold=args.threshold)
     return 0
 #    except KeyboardInterrupt:
@@ -627,7 +621,6 @@ if __name__ == "__main__":
 #    if DEBUG:
 #        sys.argv.append("-h")
 #        sys.argv.append("-v")
-#        sys.argv.append("-r")
     if TESTRUN:
         import doctest
         doctest.testmod()
