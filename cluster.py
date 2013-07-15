@@ -39,6 +39,8 @@ from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
 from Bio import SeqIO
 from bx.intervals.intersection import Interval, IntervalTree
+from multiprocessing import Process, Queue
+import multiprocessing
 
 
 __all__ = []
@@ -47,10 +49,8 @@ __date__ = '2013-07-10'
 __updated__ = '2013-07-15'
 
 
-DEBUG = 0
 TESTRUN = 0
 PROFILE = 0
-verbose = 0
 
 
 class Tee(object):
@@ -193,7 +193,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
     locus2species = {}
 
 
-    print 'Reading multiparanoid gene clusters:'
+    if verbose > 0:
+        print 'Reading multiparanoid gene clusters:'
     with open(paranoid) as tsv:
         # Sample line:
         # 1    avermitilis_MA4680.faa    SAV_1680.BA000030    1    1.000    Kitasatospora_setae_DSM43861.faa-SirexAA_E.faa-albus_J1074.faa-avermitilis_MA4680.faa-cattleya_DSM46488.faa-coelicolor_A3_2.faa-flavogriseus_IAF45CD.faa-griseus_NBRC13350.faa-scabiei_87.22.faa-venezuelae_Shinobu_719.faa-violaceusniger_Tu4113.faa    diff. numbers
@@ -208,40 +209,61 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
                 else:
                     # MultiParanoid
                     idname = 'clusterID'
-                # Build gene-to-cluster-ID(s) dict
+                # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
                 if row['gene'] not in gene2ortho:
                     gene2ortho[row['gene']] = []
                 gene2ortho[row['gene']].append(row[idname])
-                # Build cluster-ID-to-all-genes dict of lists.
-                if row[idname] in ortho2genes:
-                    ortho2genes[row[idname]].append(row['gene'])
-                else:
-                    ortho2genes[row[idname]] = [row['gene']]
+                # Build cluster-ID-to-all-genes dict of lists. row[idname] is the cluster number.
+                if row[idname] not in ortho2genes:
+                    ortho2genes[row[idname]] = []
+                ortho2genes[row[idname]].append(row['gene'])
         except csv.Error as e:
-            sys.exit('file %s, line %d: %s' % (orthofile, reader.line_num, e))
-    print '\ttotal lines read:', reader.line_num
-    print '\ttotal entries in gene2ortho:', len(gene2ortho)
-    print '\ttotal entries in ortho2genes:', len(ortho2genes)
+            sys.exit('file %s, line %d: %s' % (paranoid, reader.line_num, e))
+    if verbose > 0:
+        print '\ttotal lines read:', reader.line_num
+        print '\ttotal entries in gene2ortho:', len(gene2ortho)
+        print '\ttotal entries in ortho2genes:', len(ortho2genes)
 
 
-    print 'Reading species list file:'
+    if verbose > 0:
+        print 'Reading species list file:'
     for s in open(config):
         species.append(s.strip())
-    print '\ttotal species:', len(species)
     species.sort(key = lambda s: s.lower())
+    if verbose > 0:
+        print '\ttotal species:', len(species)
 
 
-    print 'Reading all genbank files:'
+    if verbose > 0:
+        print 'Reading all genbank files:'
+    task_queue = Queue()
+    done_queue = Queue()
+
+    # Simple helper
+    def worker(tasks, done):
+        while not tasks.empty():
+            (s, gb) = tasks.get()
+            done.put((s, SeqIO.read(gb, "genbank")))
+
     # Detect which species it is by the first 5 characters.
     # FIXME: needs a better solution.
     for gb in paths:
         for s in species:
             if s[0:5] == gb[0:5]:
-                print '\t%s corresponds to species %s' % (gb, s)
+                if verbose > 1:
+                    print '\t%s corresponds to species %s' % (gb, s)
                 break
-        genbank[s] = SeqIO.read(gb, "genbank")
+        task_queue.put((s, gb))
+    for i in range(multiprocessing.cpu_count()):
+        Process(target=worker, args=(task_queue, done_queue)).start()
+    for i in range(len(paths)):
+        s, rec = done_queue.get()
+        genbank[s] = rec
         locus2species[genbank[s].name] = s
-    print '\ttotal records parsed:', len(genbank)
+    if verbose > 0:
+        print '\ttotal records parsed:', len(genbank)
+    task_queue.close()
+    done_queue.close()
 
 
     print 'Parsing clusters and assigning genes to them:'
@@ -582,8 +604,8 @@ USAGE
 ''' % (program_shortdesc, str(__date__))
 
     parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
-    parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up to -vvv [default: %(default)s]")
-    parser.add_argument("-d", "--debug", dest="DEBUG", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
+    parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up -vvv [default: %(default)s]")
+    parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
@@ -594,8 +616,11 @@ USAGE
     # Process arguments
     args = parser.parse_args()
 
-    verbose = args.verbose
-    DEBUG = args.debug
+    global verbose
+    if args.debug:
+        verbose = 3
+    else:
+        verbose = args.verbose
 #    recurse = args.recurse
 #    inpat = args.include
 #    expat = args.exclude
