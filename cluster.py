@@ -26,8 +26,6 @@ It defines classes_and_methods
 # TODO:
 # - calculate "cluster weight" as an average of all link weights
 # - add cluster-level threshold (by cluster weight)
-# - add an option to ignore putative clusters
-# - trim clusters on both ends for the length which antismash2 adds "for insurance"
 
 
 import sys
@@ -110,50 +108,6 @@ def print_species_header(species, tee):
     tee.write('\n')
 
 
-def dedup_clusters(source, target):
-    'removes identical clusters from the supplied "source" dict of dicts, writes unique clusters to "target"'
-    # List of clusters to skip when creating target.
-    skiplist = []
-    # FIXME: counter of different weights. Must fix different weights, not count them.
-    weights_differ = 0
-    total_weight_diffs = 0.0
-    min_diff = 1.0
-    max_diff = 0.0
-    for c1, n in source.iteritems():
-        if c1 in skiplist:
-            continue
-        target[c1] = n
-        curclust = [c1]
-        curclust.extend(n.keys())
-        curclust.sort()
-        for sub in n.iterkeys():
-            if sub not in source:
-                continue
-            subflat = [sub]
-            subflat.extend(source[sub].keys())
-            subflat.sort()
-            if subflat == curclust:
-                # Check a single weight (e.g. between c1 and sub), just in case
-                try:
-                    assert source[c1][sub] == source[sub][c1]
-                except:
-                    weights_differ += 1
-                    delta = abs(source[sub][c1] - source[c1][sub])
-                    total_weight_diffs += delta
-                    min_diff = min(min_diff, delta)
-                    max_diff = max(max_diff, delta)
-                    # FIXME
-#                    print 'c1', c1
-#                    print 'source', source[c1]
-#                    print 'sub', sub
-#                    print 'duplicate', source[sub]
-#                    raise
-                skiplist.append(sub)
-    print '\tfound and removed', len(set(skiplist)), 'duplicate clusters;'
-    print '\tnow only', len(target), 'seed clusters remain.'
-    print '\tfound %s differing weights; min/avg/max differences are %s, %s, %s.' % (weights_differ, min_diff, total_weight_diffs / weights_differ, max_diff)
-
-
 def bin_key(weight):
     'for a given weight, return appropriate weight_bin key'
     if weight <= 0.05: return 0.05
@@ -216,11 +170,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     cluster_weights = {}
     # Same as above, but without duplicate links to other species.
     weights_clean = {}
-    # As above, but after removing identical clusters of clusters.
-    weights_dedup = {}
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
-    weights_intra_dedup = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
 
@@ -538,6 +489,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         for s, v in by_species.iteritems():
             # Intra.
             if s == c1[0]:
+                if verbose > 3:
+                    print 'intra-species (c1, c2, list):', c1, c2, v
                 for onec in v:
                     if c1 not in weights_intra:
                         weights_intra[c1] = {}
@@ -547,6 +500,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             elif len(v) == 1:
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
+                if verbose > 3:
+                    print 'one-to-one:', c1, v
                 weights_clean[c1][v[0][1]] = v[0][0]
                 num_pairs += 1
             # Multi-map case.
@@ -555,6 +510,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
                 weights_clean[c1][best[1]] = best[0]
+                if verbose > 3:
+                    print 'one-to-many:', c1, v
+                    print 'best:', best
                 num_pairs += 1
     if verbose > 1:
         print '\t%s self-links separated' % num_pairs_intra
@@ -563,22 +521,14 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     del skip_list
 
 
-    if verbose > 0:
-        print 'De-duplicating inter-species clusters:'
-    dedup_clusters(source = weights_clean, target = weights_dedup)
-    if verbose > 0:
-        print 'De-duplicating intra-species clusters:'
-    dedup_clusters(source = weights_intra, target = weights_intra_dedup)
     sys.exit()
-
-
     print 'Grouping into clusters with 11, 10, ... links.'
-    # Dict grouping weights_dedup by the number of links inside.
+    # Dict grouping weights_clean by the number of links inside.
     by_count = {}
     # Init.
     for i in range(1, len(species) + 1):
         by_count[i] = {}
-    for c1, nested_dict in weights_dedup.iteritems():
+    for c1, nested_dict in weights_clean.iteritems():
         # +1 for the c1, which is not counted.
         group_len = len(nested_dict) + 1
         try:
@@ -591,7 +541,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         by_count[group_len][c1] = nested_dict
 
 
-    #del weights_clean, weights_dedup, weights_intra
+    #del weights_clean, weights_intra
 
 
     print 'Summary:'
@@ -737,7 +687,7 @@ USAGE
 
     global verbose
     if args.debug:
-        verbose = 3
+        verbose = 10
     else:
         verbose = args.verbose
 #    recurse = args.recurse
