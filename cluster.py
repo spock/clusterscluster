@@ -464,20 +464,19 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             print '%s\t%s\t%s' %(x, val, bar)
 
 
-    # Manual data examination had shown that many (possibly even the majority of)
-    # multi-links between species have scores of 1.0. Removing them will adversely affect
-    # the estimation of new clusters potential.
-    # This is why multi-link resolution is commented out below.
+    # Manual data examination had shown that many multi-links between species
+    # have high scores of up 1.0. Removing them may adversely affect the
+    # estimation of new clusters potential. This is why multi-link resolution
+    # is commented out below.
     if verbose > 0:
 #        print 'Resolving multi-maps to single species by weight, and removing intra-species links.'
         print 'Removing intra-species links.'
-    # List of cluster pair we had already iterated, to avoid double-processing.
+    # List of cluster pairs we had already iterated, to avoid double-processing.
     skip_list = []
     # Counters for actual remaining cluster link pairs.
     num_pairs = 0
     num_pairs_intra = 0
     for c1 in cluster_weights.iterkeys():
-        # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
         # Group all linked clusters by species.
         by_species = {}
         # Populate by-species group.
@@ -491,36 +490,43 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             by_species[c2[0]].append((cluster_weights[c1][c2], c2))
         # Iterate all groups, filling weights_clean and weights_intra.
         for s, v in by_species.iteritems():
-            # Intra.
-            if s == c1[0]:
+            if s == c1[0]: # Intra case: link(s) to own cluster(s).
                 if verbose > 3:
                     print 'intra-species (c1, c2, list):', c1, c2, v
                 if c1 not in weights_intra:
                     weights_intra[c1] = {}
                 for onec in v:
+                    if onec[1] not in weights_intra:
+                        weights_intra[onec[1]] = {}
                     weights_intra[c1][onec[1]] = onec[0]
+                    weights_intra[onec[1]][c1] = onec[0] # mirror
                 num_pairs_intra += len(v)
-            # Normal case.
-            elif len(v) == 1:
+            elif len(v) == 1: # Normal case: 1 linked cluster in other species.
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
+                if v[0][1] not in weights_clean:
+                    weights_clean[v[0][1]] = {}
                 if verbose > 3:
-                    print 'one-to-one:', c1, v
+                    print 'one-to-one:', c1, v[0]
                 weights_clean[c1][v[0][1]] = v[0][0]
+                weights_clean[v[0][1]][c1] = v[0][0] # mirror
                 num_pairs += 1
-            # Multi-map case.
-            elif len(v) > 1:
+            elif len(v) > 1: # Multi-map case.
+                # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
                 # See detailed comment above for the reason of commenting out.
 #                best = sorted(v)[-1]
+#                weights_clean[c1][best[1]] = best[0]
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
-#                weights_clean[c1][best[1]] = best[0]
                 if verbose > 3:
                     print 'one-to-many:', c1, v
 #                    print 'best:', best
                 num_pairs += len(v)
                 for onec in v:
+                    if onec[1] not in weights_intra:
+                        weights_intra[onec[1]] = {}
                     weights_clean[c1][onec[1]] = onec[0]
+                    weights_clean[onec[1]][c1] = onec[0] # mirror
     if verbose > 1:
         print '\t%s unique intra-species links' % num_pairs_intra
     if verbose > 0:
