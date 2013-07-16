@@ -369,7 +369,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         print 'Parsing clusters and assigning genes to them:'
     if verbose > 1:
         print '\tgetting extension sizes for diff. cluster types from antismash2 config'
-        rulesdict = hmm_detection.create_rules_dict()
+    rulesdict = hmm_detection.create_rules_dict()
     for s in species:
         if verbose > 2:
             print '\tprocessing', s
@@ -481,7 +481,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     for (c1, c2) in pairs:
         num_pairs += 1
         weight = calculate_weight(c1, c2)
-        if verbose > 2:
+        if verbose > 3:
+            print '\tassigned weight', weight, 'to', c1, 'and', c2
+        elif verbose > 2 and weight > 1.0:
             print '\tassigned weight', weight, 'to', c1, 'and', c2
         weight_bins[bin_key(weight)] += 1
         if weight >= threshold:
@@ -496,6 +498,13 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     if verbose > 0:
         print 'Distribution of %s weights (bins of size 0.05)' % num_pairs
         print 'bin\tweights\tgraph'
+        # Maximal 'width' of 1 bar.
+        height = 120
+        for x in range(5, 105, 5):
+            x = x/100.0
+            val = weight_bins[x]
+            bar = '#' * int(round(height*val/num_pairs))
+            print '%s\t%s\t%s' %(x, val, bar)
     sys.exit()
 
 
