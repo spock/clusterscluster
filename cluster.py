@@ -661,7 +661,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     def graph_unique_change_when_adding(reverse = True):
         print 'Graph of the change of unique clusters fraction with each new added genome'
         if not reverse:
-            print '(reversed)'
+            print '(reversed: from genomes with less clusters to genomes with more)'
         # List of tuples (number_of_clusters, species), for sorting.
         numclust_species = []
         for s in species:
@@ -673,6 +673,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # Horizontal bar "height" (length).
         height = 90
         first = True
+        # Draw a reference 100% line.
+        print '%s\t%s\t%s' % ('#' * height, 1.0, 'Reference')
         for (numclust, s) in numclust_species:
             if first: # no need to calculate anything, ratio is 1.0
                 first = False
@@ -695,7 +697,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         with each new genome'''
         print 'Graph of the ratio of observed/expected total unique clusters.'
         if not reverse:
-            print '(reversed)'
+            print '(reversed: from genomes with less clusters to genomes with more)'
         # List of tuples (number_of_clusters, species), for sorting.
         numclust_species = []
         for s in species:
@@ -710,6 +712,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         table =[]
         # Horizontal bar "height" (length).
         height = 90
+        # Draw a reference 100% line.
+        print '%s\t%s\t%s' % ('#' * height, 1.0, 'Reference')
         for (numclust, s) in numclust_species:
             total_expected += len(cluster2genes[s])
             total_observed += get_unique_clusters(s)
