@@ -25,7 +25,9 @@ def get_extension_size_by_cluster_type(clustertype, rulesdict):
     extension = ''
 #    print 'clustertype', clustertype
     if "-" in clustertype:
-        extension = max([rulesdict[value][2] for value in clustertype.split("-")])
+        # antismash2 uses max here, but these values are different for cluster head
+        # and tail in composite-type clusters, so min is the safer option.
+        extension = min([rulesdict[value][2] for value in clustertype.split("-")])
     else:
 #        print 'rulesdict[clustertype]', rulesdict[clustertype]
         extension = rulesdict[clustertype][2]

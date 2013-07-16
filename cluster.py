@@ -160,7 +160,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     "threshold" is a biocluster-biocluster link weight threshold.
     "prefix" is prepended to all output files.
     "trim", if True, causes antismash2 clusters to lose non-core extensions at
-    both ends of the cluster (these are hard-coded in antismash2).
+    both ends of the cluster (these are hard-coded in antismash2). Note that for composite-type
+    clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
+    for the backteriocin-t1pks cluster).
     "skipp" means "skip putative clusters", if set.'''
 
     # Declare important variables.
@@ -277,6 +279,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         print '\tgetting extension sizes for diff. cluster types from antismash2 config'
         rulesdict = hmm_detection.create_rules_dict()
     for s in species:
+        if verbose > 2:
+            print '\tprocessing', s
         clustertrees[s] = IntervalTree()
         cluster2genes[s] = {}
         numbers2products[s] = {}
@@ -331,7 +335,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                     gene_name = f.qualifiers[qualifier][0] + '.' + genbank[s].name
                     # One gene may belong to more than one cluster.
                     if verbose > 2:
-                        print '\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
+                        print '\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
                     num_genes += 1
                     gene2clusters[s][gene_name] = []
                     for cluster in cl:
