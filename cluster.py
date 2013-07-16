@@ -511,19 +511,26 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             val = weight_bins[x]
             bar = '#' * int(round(height*val/num_pairs))
             print '%s\t%s\t%s' %(x, val, bar)
-    sys.exit()
 
 
     if verbose > 0:
         print 'Resolving multi-maps to single species by weight, and removing links to self.'
     if verbose > 1:
         print '\t%s initial link seeds' % len(cluster_weights)
+    # List of cluster pair we had already iterated, to avoid double-processing.
+    skip_list = []
+    num_pairs = 0
+    num_pairs_intra = 0
     for c1 in cluster_weights.iterkeys():
         # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
         # Group all linked clusters by species.
         by_species = {}
         # Populate by-species group.
         for c2 in cluster_weights[c1].iterkeys():
+            if (c1, c2) in skip_list:
+                continue
+            skip_list.append((c1, c2))
+            skip_list.append((c2, c1))
             if c2[0] not in by_species:
                 by_species[c2[0]] = []
             by_species[c2[0]].append((cluster_weights[c1][c2], c2))
@@ -535,25 +542,34 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                     if c1 not in weights_intra:
                         weights_intra[c1] = {}
                     weights_intra[c1][onec[1]] = onec[0]
+                    num_pairs_intra += 1
             # Normal case.
             elif len(v) == 1:
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
                 weights_clean[c1][v[0][1]] = v[0][0]
+                num_pairs += 1
             # Multi-map case.
             elif len(v) > 1:
                 best = sorted(v)[-1]
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
                 weights_clean[c1][best[1]] = best[0]
-    print '\t%s self-link seeds separated' % len(weights_intra)
-    print '\t%s clean non-redundant weight seeds obtained' % len(weights_clean)
+                num_pairs += 1
+    if verbose > 1:
+        print '\t%s self-links separated' % num_pairs_intra
+    if verbose > 0:
+        print '\t%s clean non-redundant links obtained' % num_pairs
+    del skip_list
 
 
-    print 'De-duplicating inter-species clusters:'
+    if verbose > 0:
+        print 'De-duplicating inter-species clusters:'
     dedup_clusters(source = weights_clean, target = weights_dedup)
-    print 'De-duplicating intra-species clusters:'
+    if verbose > 0:
+        print 'De-duplicating intra-species clusters:'
     dedup_clusters(source = weights_intra, target = weights_intra_dedup)
+    sys.exit()
 
 
     print 'Grouping into clusters with 11, 10, ... links.'
