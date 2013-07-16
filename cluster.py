@@ -326,6 +326,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     if verbose > 1:
         print '\tgetting extension sizes for diff. cluster types from antismash2 config'
     rulesdict = hmm_detection.create_rules_dict()
+    if trim and verbose > 1:
+        print '\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.'
     for s in species:
         if verbose > 2:
             print '\tprocessing', s
@@ -335,8 +337,6 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         coords2numbers[s] = {}
         gene2clusters[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
-        if trim and verbose > 1:
-            print '\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.'
         for f in genbank[s].features:
             if f.type == 'cluster':
                 cluster_number = parse_cluster_number(f.qualifiers['note'])
