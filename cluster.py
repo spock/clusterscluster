@@ -287,32 +287,44 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         coords2numbers[s] = {}
         gene2clusters[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
+        if trim and verbose > 1:
+            print '\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.'
         for f in genbank[s].features:
             if f.type == 'cluster':
+                cluster_number = parse_cluster_number(f.qualifiers['note'])
+                start = int(f.location.start.position)
+                end = int(f.location.end.position)
                 if skipp and f.qualifiers['product'][0] == 'putative':
                     if verbose > 1:
                         print '\tskipping putative cluster #%s at (%s, %s)' % \
-                                (parse_cluster_number(f.qualifiers['note']),
-                                 f.location.start.position, f.location.end.position)
+                                (cluster_number, start, end)
                     continue
-                start = int(f.location.start.position)
-                end = int(f.location.end.position)
-                # Use cluster type to get extension size, including composite types.
-                extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
-                # Remove extension from both ends.
-                start += extension
-                end -= extension
-                try:
-                    assert start < end
-                except:
-                    print 'trimming extension failed for: '
-                    print f.qualifiers['product'][0], '(%s)' % parse_cluster_number(f.qualifiers['note'])
-                    print 'extension', extension
-                    print 'ori start %s, new start %s' % (f.location.start.position, start)
-                    print 'ori  end %s, new  end %s' % (f.location.end.position, end)
-                    raise
+                if trim:
+                    # Use cluster type to get extension size, including composite types.
+                    extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
+                    # If cluster is at the genome edge - skip extension trimming.
+                    if start == 0:
+                        if verbose > 1:
+                            print '\tnot trimming left-extension for #%s (%s) - at the genome start' % \
+                                   (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                    else:
+                        start += extension
+                    if end == len(genbank[s]):
+                        if verbose > 1:
+                            print '\tnot trimming right-extension for #%s (%s) - at the genome end' % \
+                                   (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                    else:
+                        end -= extension
+                    try:
+                        assert start < end
+                    except:
+                        print 'trimming extension failed for: '
+                        print f.qualifiers['product'][0], '(%s)' % parse_cluster_number(f.qualifiers['note'])
+                        print 'extension', extension
+                        print 'ori start %s, new start %s' % (f.location.start.position, start)
+                        print 'ori  end %s, new  end %s' % (f.location.end.position, end)
+                        raise
                 clustertrees[s].add_interval(Interval(start, end))
-                cluster_number = parse_cluster_number(f.qualifiers['note'])
                 cluster2genes[s][cluster_number] = []
                 all_clusters.append((s, cluster_number))
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
@@ -343,13 +355,22 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                         gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
         if verbose > 1:
             print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
+    # Extra verification.
+    for s in species:
+        for num, cl in cluster2genes[s].iteritems():
+            try:
+                assert len(cl) > 0
+            except:
+                print 'cluster %s of %s has 0 genes' % (num, s)
+                raise
     if verbose > 0:
         print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
     # Sort by species.lower() to ensure stable order of cluster pairs.
     all_clusters.sort(key = lambda s: s[0].lower())
     sys.exit()
 
-    print 'Freeing memory.'
+    if verbose > 2:
+        print 'Freeing memory.'
     del genbank
     del clustertrees
 
