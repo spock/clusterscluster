@@ -673,8 +673,6 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # Horizontal bar "height" (length).
         height = 90
         first = True
-        # Draw a reference 100% line.
-        print '%s\t%s\t%s' % ('#' * height, 1.0, 'Reference')
         for (numclust, s) in numclust_species:
             if first: # no need to calculate anything, ratio is 1.0
                 first = False
@@ -728,7 +726,24 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             print '%s\t%s\t%s\t%s' % item
 
     cumulative_growth()
-    cumulative_growth(False)
+#    cumulative_growth(False)
+
+
+    # Finally, show a list of all species, stating the number of unique
+    # clusters they have.
+    print 'Graph of the percentage of unique clusters in each of the genomes.'
+    height = 60
+    # Draw a reference 100% line.
+    print '%s\t%s\t%s\t%s\t%s' % ('Bar'.ljust(height), 'Unique', 'Total', 'Ratio', 'Genome')
+    print '%s\t%s\t%s\t%s\t%s' % ('#' * height, 1.0, 1.0, 1.0, 'Reference')
+    for s in species:
+        unique = get_unique_clusters(s)
+        total = len(cluster2genes[s])
+        ratio = unique / float(total)
+        bar = '#' * int(round(height*ratio))
+        bar = bar.ljust(height)
+        print '%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s)
+
 
 #class CLIError(Exception):
 #    '''Generic exception to raise and log different fatal errors.'''
