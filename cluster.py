@@ -341,7 +341,12 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     # Simple helper
     def worker(tasks, done):
         while not tasks.empty():
-            (s, gb) = tasks.get()
+            try:
+                # _nowait: otherwise race conditions emerge, when tasks.empty() evaluates
+                # to False, but then some other worker grabs the work and leaves tasks empty.
+                (s, gb) = tasks.get_nowait()
+            except: # Queue.Empty
+                return
             done.put((s, SeqIO.read(gb, "genbank")))
 
     # Detect which species it is by the first 5 characters.
@@ -391,7 +396,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                         print '\tskipping putative cluster #%s at (%s, %s)' % \
                                 (cluster_number, start, end)
                     continue
-                if trim:
+                # Putative clusters have neither extensions nor rules for them.
+                if trim and f.qualifiers['product'][0] != 'putative':
                     # Use cluster type to get extension size, including composite types.
                     extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
                     # If cluster is at the genome edge - skip extension trimming.
@@ -508,8 +514,10 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     sys.exit()
 
 
-    print 'Resolving multi-maps to single species by weight, and removing links to self.'
-    print '\t%s initial link seeds' % len(cluster_weights)
+    if verbose > 0:
+        print 'Resolving multi-maps to single species by weight, and removing links to self.'
+    if verbose > 1:
+        print '\t%s initial link seeds' % len(cluster_weights)
     for c1 in cluster_weights.iterkeys():
         # If sp1.a->sp2.b=0.5, sp1.a->sp2.c=0.9, then sp1.a->sp2.c.
         # Group all linked clusters by species.
