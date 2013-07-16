@@ -679,7 +679,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 ratio = 1.0
             else:
                 unique = get_unique_clusters(s, allowed_species)
-                ratio = float(unique) / numclust
+                ratio = round(float(unique) / numclust, 2)
             allowed_species.append(s)
             bar = '#' * int(round(height*ratio))
             bar = bar.ljust(height)
@@ -687,7 +687,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
 
 
     graph_unique_change_when_adding()
-    graph_unique_change_when_adding(False)
+#    graph_unique_change_when_adding(False)
 
 
     def cumulative_growth(reverse = True):
@@ -715,7 +715,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         for (numclust, s) in numclust_species:
             total_expected += len(cluster2genes[s])
             total_observed += get_unique_clusters(s)
-            ratio = float(total_observed) / total_expected
+            ratio = round(float(total_observed) / total_expected, 2)
             table.append((total_observed, total_expected, round(ratio, 2), s))
             bar = '#' * int(round(height*ratio))
             bar = bar.ljust(height)
@@ -739,7 +739,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     for s in species:
         unique = get_unique_clusters(s)
         total = len(cluster2genes[s])
-        ratio = unique / float(total)
+        ratio = round(unique / float(total), 2)
         bar = '#' * int(round(height*ratio))
         bar = bar.ljust(height)
         print '%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s)
