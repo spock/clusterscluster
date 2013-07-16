@@ -215,25 +215,25 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 print 'c2_genes (c2)', c2_genes, cluster2genes[c2[0]][c2[1]]
                 print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
             raise
-        # Link weight formula:
-        # 1. If links/min(c1_genes, c2_genes) == 1.0, then weight is 1.0
-        # 2. Otherwise, weight = (links/2.0) * ( 1/min(c1_genes, c2_genes) + 1/max(c1_genes, c2_genes) )
-        weight = float(links) / max(min(c1_genes, c2_genes), links)
-        if weight == 0.0 and verbose > 3:
-            print 'c1', c1, 'c2', c2, 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
+        # Link weight formula.
+        # Multiple versions were tried/examined.
+        # 1. weight = links/min(c1_genes, c2_genes)
+        # Unfortunately, this one causes 1-gene clusters to have too many weight-1.0 links.
+        # 2. weight = (links/2.0) * ( 1/min(c1_genes, c2_genes) + 1/max(c1_genes, c2_genes) )
+        # (or the equivalent weight = 0.5 * links * ( 1.0 / c1_genes + 1.0 / c2_genes ) )
+        # was giving values > 1.0, as 'links' can be > than c1 or c2.
+        # 3. "safe" derivative of #2,
+        # weight = 0.5* ( min(c1_genes, links) / c1_genes + min(c2_genes, links) / c2_genes )
+        # was too optimistic: 0.53 for links = 1, c1 = 1, c2 = 20.
+        # The least biased formula is below. It properly penalizes if the c1_genes and
+        # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
+        both = float(c1_genes + c2_genes)
+        weight = ( (c1_genes/both) * (min(c1_genes, links)/float(c1_genes)) +
+                   (c2_genes/both) * (min(c2_genes, links)/float(c2_genes)) )
+        if weight == 0.0:
+            if verbose > 3:
+                print 'c1', c1, 'c2', c2, 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
             return weight
-        # If c1_genes == c2_genes, then recalculation will not change anything.
-        if weight > 0 and weight < 0.9999 and c1_genes != c2_genes:
-            weight_old = weight
-            weight = 0.5 * links * ( 1.0 / min(c1_genes, c2_genes) + 1.0 / max(c1_genes, c2_genes) )
-            try:
-                assert weight < weight_old
-            except:
-                print 'old weight', weight_old, 'new weight', weight
-                print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
-                raise
-            if verbose > 2:
-                print '\tre-calculated weight from', weight_old, 'to', weight
         try:
             assert weight <= 1.0
         except:
@@ -440,7 +440,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         weight = calculate_weight(c1, c2)
         if verbose > 3:
             print '\tassigned weight', weight, 'to', c1, 'and', c2
-        elif verbose > 2 and weight > 1.0:
+        elif verbose > 2 and weight > 0.0:
             print '\tassigned weight', weight, 'to', c1, 'and', c2
         weight_bins[bin_key(weight)] += 1
         if weight >= threshold:
