@@ -689,6 +689,43 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     graph_unique_change_when_adding()
     graph_unique_change_when_adding(False)
 
+
+    def cumulative_growth(reverse = True):
+        '''Shows expected and observed growth of the number of unique clusters
+        with each new genome'''
+        print 'Graph of the ratio of observed/expected total unique clusters.'
+        if not reverse:
+            print '(reversed)'
+        # List of tuples (number_of_clusters, species), for sorting.
+        numclust_species = []
+        for s in species:
+            numclust_species.append((len(cluster2genes[s]), s))
+        # 'reverse' means DESC
+        numclust_species.sort(reverse=reverse)
+        # All-important counters.
+        total_expected = 0
+        total_observed = 0
+        # List containing all the data for the table, as tuples
+        # (observed, expected, ratio, species)
+        table =[]
+        # Horizontal bar "height" (length).
+        height = 90
+        for (numclust, s) in numclust_species:
+            total_expected += len(cluster2genes[s])
+            total_observed += get_unique_clusters(s)
+            ratio = float(total_observed) / total_expected
+            table.append((total_observed, total_expected, round(ratio, 2), s))
+            bar = '#' * int(round(height*ratio))
+            bar = bar.ljust(height)
+            print '%s\t%s\t%s' % (bar, ratio, s)
+        print 'Data table'
+        print 'Obs.\tExp.\tRatio\tGenome'
+        for item in table:
+            print '%s\t%s\t%s\t%s' % item
+
+    cumulative_growth()
+    cumulative_growth(False)
+
 #class CLIError(Exception):
 #    '''Generic exception to raise and log different fatal errors.'''
 #    def __init__(self, msg):
