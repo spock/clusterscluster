@@ -464,12 +464,16 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             print '%s\t%s\t%s' %(x, val, bar)
 
 
+    # Manual data examination had shown that many (possibly even the majority of)
+    # multi-links between species have scores of 1.0. Removing them will adversely affect
+    # the estimation of new clusters potential.
+    # This is why multi-link resolution is commented out below.
     if verbose > 0:
-        print 'Resolving multi-maps to single species by weight, and removing links to self.'
-    if verbose > 1:
-        print '\t%s initial link seeds' % len(cluster_weights)
+#        print 'Resolving multi-maps to single species by weight, and removing intra-species links.'
+        print 'Removing intra-species links.'
     # List of cluster pair we had already iterated, to avoid double-processing.
     skip_list = []
+    # Counters for actual remaining cluster link pairs.
     num_pairs = 0
     num_pairs_intra = 0
     for c1 in cluster_weights.iterkeys():
@@ -491,11 +495,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             if s == c1[0]:
                 if verbose > 3:
                     print 'intra-species (c1, c2, list):', c1, c2, v
+                if c1 not in weights_intra:
+                    weights_intra[c1] = {}
                 for onec in v:
-                    if c1 not in weights_intra:
-                        weights_intra[c1] = {}
                     weights_intra[c1][onec[1]] = onec[0]
-                    num_pairs_intra += 1
+                num_pairs_intra += len(v)
             # Normal case.
             elif len(v) == 1:
                 if c1 not in weights_clean:
@@ -506,18 +510,21 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 num_pairs += 1
             # Multi-map case.
             elif len(v) > 1:
-                best = sorted(v)[-1]
+                # See detailed comment above for the reason of commenting out.
+#                best = sorted(v)[-1]
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
-                weights_clean[c1][best[1]] = best[0]
+#                weights_clean[c1][best[1]] = best[0]
                 if verbose > 3:
                     print 'one-to-many:', c1, v
-                    print 'best:', best
-                num_pairs += 1
+#                    print 'best:', best
+                num_pairs += len(v)
+                for onec in v:
+                    weights_clean[c1][onec[1]] = onec[0]
     if verbose > 1:
-        print '\t%s self-links separated' % num_pairs_intra
+        print '\t%s unique intra-species links' % num_pairs_intra
     if verbose > 0:
-        print '\t%s clean non-redundant links obtained' % num_pairs
+        print '\t%s unique inter-species links' % num_pairs
     del skip_list
 
 
