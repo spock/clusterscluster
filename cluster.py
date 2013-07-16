@@ -667,11 +667,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         for s in species:
             numclust_species.append((len(cluster2genes[s]), s))
         # 'reverse' means DESC
-        numclust_species.sort(reverse)
+        numclust_species.sort(reverse=reverse)
         # List of the species we are allowed to look for linked clusters in.
         allowed_species = []
         # Horizontal bar "height" (length).
-        height = 120
+        height = 90
         first = True
         for (numclust, s) in numclust_species:
             if first: # no need to calculate anything, ratio is 1.0
@@ -682,7 +682,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 ratio = float(unique) / numclust
             allowed_species.append(s)
             bar = '#' * int(round(height*ratio))
-            print '%s\t\t%s\t%s' % (s, ratio, bar)
+            bar = bar.ljust(height)
+            print '%s\t%s\t%s' % (bar, ratio, s)
 
 
     graph_unique_change_when_adding()
