@@ -523,8 +523,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
 #                    print 'best:', best
                 num_pairs += len(v)
                 for onec in v:
-                    if onec[1] not in weights_intra:
-                        weights_intra[onec[1]] = {}
+                    if onec[1] not in weights_clean:
+                        weights_clean[onec[1]] = {}
                     weights_clean[c1][onec[1]] = onec[0]
                     weights_clean[onec[1]][c1] = onec[0] # mirror
     if verbose > 1:
