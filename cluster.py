@@ -151,12 +151,15 @@ def dedup_clusters(source, target):
     print '\tfound %s differing weights; min/avg/max differences are %s, %s, %s.' % (weights_differ, min_diff, total_weight_diffs / weights_differ, max_diff)
 
 
-def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
+def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True, skipp = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
     "threshold" is a biocluster-biocluster link weight threshold.
-    "prefix" is prepended to all output files.'''
+    "prefix" is prepended to all output files.
+    "trim", if True, causes antismash2 clusters to lose non-core extensions at
+    both ends of the cluster (these are hard-coded in antismash2).
+    "skipp" means "skip putative clusters", if set.'''
 
     # Declare important variables.
     # Mapping of each gene to the clusterID(s) it belongs to.
@@ -194,7 +197,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
 
 
     if verbose > 0:
-        print 'Reading multiparanoid gene clusters:'
+        print 'Reading quick/multi-paranoid gene clusters:'
     with open(paranoid) as tsv:
         # Sample line:
         # 1    avermitilis_MA4680.faa    SAV_1680.BA000030    1    1.000    Kitasatospora_setae_DSM43861.faa-SirexAA_E.faa-albus_J1074.faa-avermitilis_MA4680.faa-cattleya_DSM46488.faa-coelicolor_A3_2.faa-flavogriseus_IAF45CD.faa-griseus_NBRC13350.faa-scabiei_87.22.faa-venezuelae_Shinobu_719.faa-violaceusniger_Tu4113.faa    diff. numbers
@@ -235,7 +238,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
 
 
     if verbose > 0:
-        print 'Reading all genbank files:'
+        print 'Reading all genbank files in parallel:'
     task_queue = Queue()
     done_queue = Queue()
 
@@ -276,8 +279,22 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_'):
         # Populate clusters tree and dict with (start, end) as keys.
         for f in genbank[s].features:
             if f.type == 'cluster':
+                if skipp and f.qualifiers['product'][0] == 'putative':
+                    continue
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
+                # use cluster type to get extension size, including composite types
+                extension = as2_config[f.qualifiers['product'][0]]
+                # try to remove that much extension from both ends
+                start += extension
+                end -= extension
+                try:
+                    assert start < end
+                except:
+                    print 'cluster type is', f.qualifiers['product'][0]
+                    print 'ori start %s, new start %s' % (f.location.start.position, start)
+                    print 'ori  end %s, new  end %s' % (f.location.end.position, end)
+                    print 'extension', extension
                 clustertrees[s].add_interval(Interval(start, end))
                 cluster_number = parse_cluster_number(f.qualifiers['note'])
                 cluster2genes[s][cluster_number] = []
@@ -607,14 +624,17 @@ USAGE
     parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up -vvv [default: %(default)s]")
     parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
+    parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
+    parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
+    parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
-    parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
 
     # Process arguments
     args = parser.parse_args()
+    trim = not args.no_trim
 
     global verbose
     if args.debug:
@@ -629,7 +649,8 @@ USAGE
 #    for inpath in paths:
 #        ### do something with inpath ###
 #        print(inpath)
-    process(prefix=args.prefix, config=args.config, paranoid=args.paranoid, paths=args.paths, threshold=args.threshold)
+    process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
+            paths=args.paths, threshold=args.threshold, trim=trim, skip=args.skipp)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
