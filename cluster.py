@@ -39,8 +39,10 @@ from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
 from Bio import SeqIO
 from bx.intervals.intersection import Interval, IntervalTree
-from multiprocessing import Process, Queue
-import multiprocessing
+from multiprocessing import Process, Queue, cpu_count
+
+
+import hmm_detection
 
 
 __all__ = []
@@ -257,7 +259,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                     print '\t%s corresponds to species %s' % (gb, s)
                 break
         task_queue.put((s, gb))
-    for i in range(multiprocessing.cpu_count()):
+    for i in range(cpu_count()):
         Process(target=worker, args=(task_queue, done_queue)).start()
     for i in range(len(paths)):
         s, rec = done_queue.get()
@@ -269,7 +271,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     done_queue.close()
 
 
-    print 'Parsing clusters and assigning genes to them:'
+    if verbose > 0:
+        print 'Parsing clusters and assigning genes to them:'
+    if verbose > 1:
+        print '\tgetting extension sizes for diff. cluster types from antismash2 config'
+        rulesdict = hmm_detection.create_rules_dict()
     for s in species:
         clustertrees[s] = IntervalTree()
         cluster2genes[s] = {}
@@ -280,29 +286,37 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         for f in genbank[s].features:
             if f.type == 'cluster':
                 if skipp and f.qualifiers['product'][0] == 'putative':
+                    if verbose > 1:
+                        print '\tskipping putative cluster #%s at (%s, %s)' % \
+                                (parse_cluster_number(f.qualifiers['note']),
+                                 f.location.start.position, f.location.end.position)
                     continue
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
-                # use cluster type to get extension size, including composite types
-                extension = as2_config[f.qualifiers['product'][0]]
-                # try to remove that much extension from both ends
+                # Use cluster type to get extension size, including composite types.
+                extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
+                # Remove extension from both ends.
                 start += extension
                 end -= extension
                 try:
                     assert start < end
                 except:
-                    print 'cluster type is', f.qualifiers['product'][0]
+                    print 'trimming extension failed for: '
+                    print f.qualifiers['product'][0], '(%s)' % parse_cluster_number(f.qualifiers['note'])
+                    print 'extension', extension
                     print 'ori start %s, new start %s' % (f.location.start.position, start)
                     print 'ori  end %s, new  end %s' % (f.location.end.position, end)
-                    print 'extension', extension
+                    raise
                 clustertrees[s].add_interval(Interval(start, end))
                 cluster_number = parse_cluster_number(f.qualifiers['note'])
                 cluster2genes[s][cluster_number] = []
                 all_clusters.append((s, cluster_number))
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
                 coords2numbers[s][(start, end)] = cluster_number
-#                print '\tadding cluster %s (%s) at (%s, %s)' % (cluster_number, f.qualifiers['product'][0], start, end)
-        # Assign genes to each cluster.
+                if verbose > 1:
+                    print '\tadding cluster %s (%s) at (%s, %s)' % (cluster_number, f.qualifiers['product'][0], start, end)
+        if verbose > 1:
+            print '\tNow assigning genes to biosynthetic clusters'
         num_genes = 0
         for f in genbank[s].features:
             if f.type == 'CDS':
@@ -316,17 +330,20 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                         qualifier = 'gene'
                     gene_name = f.qualifiers[qualifier][0] + '.' + genbank[s].name
                     # One gene may belong to more than one cluster.
-#                    print 'gene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
+                    if verbose > 2:
+                        print '\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
                     num_genes += 1
                     gene2clusters[s][gene_name] = []
                     for cluster in cl:
                         cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
                         gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
-        print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
-    print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
+        if verbose > 1:
+            print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
+    if verbose > 0:
+        print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
     # Sort by species.lower() to ensure stable order of cluster pairs.
     all_clusters.sort(key = lambda s: s[0].lower())
-
+    sys.exit()
 
     print 'Freeing memory.'
     del genbank
@@ -650,7 +667,7 @@ USAGE
 #        ### do something with inpath ###
 #        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
-            paths=args.paths, threshold=args.threshold, trim=trim, skip=args.skipp)
+            paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
