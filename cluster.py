@@ -174,6 +174,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     weights_intra = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
+    # Two lists of 2-tuples with perfect (weight 1.0) links between clusters.
+    intra_one = []
+    inter_one = []
 
 
     def get_gene_links_to_bioclusters(gene):
@@ -240,6 +243,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             print 'weight', weight
             print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
             raise
+        if weight == 1.0:
+            if c1[0] == c2[0]:
+                intra_one.append((c1, c2))
+            else:
+                inter_one.append((c1, c2))
         return weight
 
 
@@ -637,6 +645,17 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             # Once per species, show a table of intra-species cluster links, with weights;
             # looks just like the above weights table, but now only clusters from single
             # species are used.
+
+
+    if verbose > 1:
+        print 'All pairs of clusters with link weight 1.0 (inter-species).'
+        for pair in inter_one:
+            print pair,
+        print
+        print 'All pairs of clusters with link weight 1.0 (intra-species).'
+        for pair in intra_one:
+            print pair,
+        print
 
 
     def get_unique_clusters(s, allowed_species = False):
