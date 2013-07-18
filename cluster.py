@@ -132,7 +132,7 @@ def bin_key(weight):
     if weight <= 1.00: return 1.0
 
 
-def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True, skipp = False):
+def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True, skipp = False, strict = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -184,12 +184,16 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             return []
         bioclusters = []
         for orthoclust in gene2ortho[gene]:
+            if verbose > 3:
+                print 'gene', gene, 'belongs to ortho-cluster', orthoclust
             for xeno_gene in ortho2genes[orthoclust]:
                 # Extract LOCUS from gene name, find species from it.
                 xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
                 # Check if xeno_gene belongs to any biosynthetic clusters.
                 if xeno_gene in gene2clusters[xeno_species]:
                     bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
+                    if verbose > 3:
+                        print '\txeno_gene', xeno_gene, 'belongs to', gene2clusters[xeno_species][xeno_gene]
         return bioclusters
 
 
@@ -206,9 +210,14 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         c2_genes = len(cluster2genes[c2[0]][c2[1]])
         links1 = calculate_links(c1, c2)
         links2 = calculate_links(c2, c1)
-        if links1 != links2 and verbose > 2:
+        if verbose > 3:
             print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2
         links = max(links1, links2)
+        if strict:
+            if links > c1_genes or links > c2_genes:
+                links = min(c1_genes, c2_genes)
+                if verbose > 3:
+                    print 'strict mode, new links is', links
         try:
             assert links <= c1_genes or links <= c2_genes
         except:
@@ -351,7 +360,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
                 if skipp and f.qualifiers['product'][0] == 'putative':
-                    if verbose > 1:
+                    if verbose > 2:
                         print '\tskipping putative cluster #%s at (%s, %s)' % \
                                 (cluster_number, start, end)
                     continue
@@ -808,6 +817,7 @@ USAGE
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
+    parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
@@ -832,7 +842,8 @@ USAGE
 #        ### do something with inpath ###
 #        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
-            paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp)
+            paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
+            strict=args.strict)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
