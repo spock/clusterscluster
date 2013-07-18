@@ -32,7 +32,7 @@ import sys
 import os
 import csv
 import itertools
-
+from pprint import pprint
 
 from argparse import ArgumentParser
 from argparse import RawDescriptionHelpFormatter
@@ -395,9 +395,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 all_clusters.append((s, cluster_number))
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
                 coords2numbers[s][(start, end)] = cluster_number
-                if verbose > 1:
+                if verbose > 2:
                     print '\tadding cluster %s (%s) at (%s, %s)' % (cluster_number, f.qualifiers['product'][0], start, end)
-        if verbose > 1:
+        if verbose > 2:
             print '\tNow assigning genes to biosynthetic clusters'
         num_genes = 0
         for f in genbank[s].features:
@@ -658,12 +658,14 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
 
     if verbose > 1:
         print 'All pairs of clusters with link weight 1.0 (inter-species).'
-        for pair in inter_one:
-            print pair,
+        pprint(inter_one)
+#        for pair in inter_one:
+#            print pair,
         print
         print 'All pairs of clusters with link weight 1.0 (intra-species).'
-        for pair in intra_one:
-            print pair,
+        pprint(intra_one)
+#        for pair in intra_one:
+#            print pair,
         print
 
 
