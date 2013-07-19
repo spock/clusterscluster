@@ -132,7 +132,8 @@ def bin_key(weight):
     if weight <= 1.00: return 1.0
 
 
-def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True, skipp = False, strict = False):
+def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
+            skipp = False, strict = False, ortho = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -142,7 +143,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     both ends of the cluster (these are hard-coded in antismash2). Note that for composite-type
     clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
     for the backteriocin-t1pks cluster).
-    "skipp" means "skip putative clusters", if set.'''
+    "skipp" means "skip putative clusters", if set.
+    "ortho", if True, will only use orthology clusters which do not have'''
 
     # Declare important variables.
     # Mapping of each gene to the clusterID(s) it belongs to.
@@ -277,6 +279,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                     # MultiParanoid
                     idname = 'clusterID'
                 # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
+                if ortho and row['tree_conflict'] != 'No':
+                    continue
                 if row['gene'] not in gene2ortho:
                     gene2ortho[row['gene']] = []
                 gene2ortho[row['gene']].append(row[idname])
@@ -820,6 +824,7 @@ USAGE
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
+    parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names/diff.numbers problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
@@ -845,7 +850,7 @@ USAGE
 #        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
-            strict=args.strict)
+            strict=args.strict, ortho=args.no_problems)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
