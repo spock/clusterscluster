@@ -215,7 +215,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         links1 = calculate_links(c1, c2)
         links2 = calculate_links(c2, c1)
         if verbose > 3:
-            print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2
+            print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2, '(%s and %s genes)' % (c1_genes, c2_genes)
         links = max(links1, links2)
         if links > max(c1_genes, c2_genes):
             links = max(c1_genes, c2_genes)
