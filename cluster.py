@@ -266,9 +266,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             raise
         if weight >= threshold:
             if c1[0] == c2[0]:
-                intra_one.append((c1, c2))
+                intra_one.append((weight, c1, c2))
             else:
-                inter_one.append((c1, c2))
+                inter_one.append((weight, c1, c2))
         return weight
 
 
@@ -674,13 +674,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     if verbose > 1:
         print 'All pairs of clusters with link weight over %s (inter-species).' % threshold
         pprint(inter_one)
-#        for pair in inter_one:
-#            print pair,
         print
         print 'All pairs of clusters with link weight over %s (intra-species).' % threshold
         pprint(intra_one)
-#        for pair in intra_one:
-#            print pair,
         print
 
 
