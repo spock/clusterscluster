@@ -251,7 +251,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             size2 = clustersizes[c2]
             total_size = float(size1 + size2)
             weight = (size1/total_size) * min(c1_genes, links)/c1_genes + (size2/total_size) * min(c2_genes, links)/c2_genes
-            if verbose > 1 and weight > 0:
+            if verbose > 2 and weight > 0:
                 print '\tweight %s\tratio1 %s, raw %s\tratio2 %s, raw %s' % (round(weight, 2), round(size1/total_size, 2),
                                                                              round(min(c1_genes, links)/c1_genes, 2),
                                                                              round(size2/total_size, 2),
