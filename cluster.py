@@ -252,6 +252,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             size2 = clustersizes[c2]
             total_size = float(size1 + size2)
             weight = (size1/total_size) * min(c1_genes, links)/both + (size2/total_size) * min(c2_genes, links)/both
+            if verbose > 1:
+               print 'weight, ratio1, raw weight 1, ratio2, raw weight 2:', weight, size1/total_size, min(c1_genes, links)/both, size2/total_size, min(c2_genes, links)/both
         else:
             weight = min(c1_genes, links)/both + min(c2_genes, links)/both
         if weight == 0.0:
@@ -266,9 +268,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             raise
         if weight >= threshold:
             if c1[0] == c2[0]:
-                intra_one.append((weight, c1, c2))
+                intra_one.append((round(weight, 2), c1, c2))
             else:
-                inter_one.append((weight, c1, c2))
+                inter_one.append((round(weight, 2), c1, c2))
         return weight
 
 
