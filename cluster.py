@@ -133,7 +133,7 @@ def bin_key(weight):
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, ortho = False):
+            skipp = False, strict = False, ortho = False, sizes = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -179,6 +179,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     # Two lists of 2-tuples with perfect (weight 1.0) links between clusters.
     intra_one = []
     inter_one = []
+    # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
+    clustersizes = {}
 
 
     def get_gene_links_to_bioclusters(gene):
@@ -215,6 +217,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         if verbose > 3:
             print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2
         links = max(links1, links2)
+        if links > max(c1_genes, c2_genes):
+            links = max(c1_genes, c2_genes)
         if strict:
             if links > c1_genes or links > c2_genes:
                 links = min(c1_genes, c2_genes)
@@ -242,8 +246,14 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # The least biased formula is below. It properly penalizes if the c1_genes and
         # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
         both = float(c1_genes + c2_genes)
-        weight = ( (c1_genes/both) * (min(c1_genes, links)/float(c1_genes)) +
-                   (c2_genes/both) * (min(c2_genes, links)/float(c2_genes)) )
+        if sizes:
+            # Use relative cluster sizes as link contribution weight.
+            size1 = clustersizes[c1]
+            size2 = clustersizes[c2]
+            total_size = float(size1 + size2)
+            weight = (size1/total_size) * min(c1_genes, links)/both + (size2/total_size) * min(c2_genes, links)/both
+        else:
+            weight = min(c1_genes, links)/both + min(c2_genes, links)/both
         if weight == 0.0:
             if verbose > 3:
                 print 'c1', c1, 'c2', c2, 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
@@ -399,8 +409,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 all_clusters.append((s, cluster_number))
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
                 coords2numbers[s][(start, end)] = cluster_number
+                clustersizes[(s, cluster_number)] = end - start
                 if verbose > 2:
-                    print '\tadding cluster %s (%s) at (%s, %s)' % (cluster_number, f.qualifiers['product'][0], start, end)
+                    print '\tadding cluster %s (%s) at (%s, %s), %s bp long' % (cluster_number, f.qualifiers['product'][0], start, end, end-start)
         if verbose > 2:
             print '\tNow assigning genes to biosynthetic clusters'
         num_genes = 0
@@ -824,6 +835,7 @@ USAGE
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
+    parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
     parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names/diff.numbers problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
@@ -850,7 +862,7 @@ USAGE
 #        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
-            strict=args.strict, ortho=args.no_problems)
+            strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
