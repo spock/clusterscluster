@@ -133,7 +133,7 @@ def bin_key(weight):
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, ortho = False, sizes = False):
+            skipp = False, strict = False, ortho = False, sizes = False, names = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -289,7 +289,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                     # MultiParanoid
                     idname = 'clusterID'
                 # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
-                if ortho and row['tree_conflict'] != 'No':
+                if (ortho and row['tree_conflict'] != 'No') or (names and row['tree_conflict'] == 'diff. names'):
                     continue
                 if row['gene'] not in gene2ortho:
                     gene2ortho[row['gene']] = []
@@ -836,7 +836,8 @@ USAGE
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
-    parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names/diff.numbers problems [default: %(default)s]")
+    parser.add_argument("--no-names", dest="no_names", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names problems [default: %(default)s]")
+    parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
@@ -862,7 +863,8 @@ USAGE
 #        print(inpath)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
-            strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes)
+            strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
+            names=args.no_names)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
