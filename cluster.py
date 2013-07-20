@@ -245,16 +245,19 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # was too optimistic: 0.53 for links = 1, c1 = 1, c2 = 20.
         # The least biased formula is below. It properly penalizes if the c1_genes and
         # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
-        both = float(c1_genes + c2_genes)
         if sizes:
-            # Use relative cluster sizes as link contribution weight.
+            # Use relative physical cluster sizes as link contribution weight.
             size1 = clustersizes[c1]
             size2 = clustersizes[c2]
             total_size = float(size1 + size2)
-            weight = (size1/total_size) * min(c1_genes, links)/both + (size2/total_size) * min(c2_genes, links)/both
-            if verbose > 1:
-               print 'weight, ratio1, raw weight 1, ratio2, raw weight 2:', weight, size1/total_size, min(c1_genes, links)/both, size2/total_size, min(c2_genes, links)/both
+            weight = (size1/total_size) * min(c1_genes, links)/c1_genes + (size2/total_size) * min(c2_genes, links)/c2_genes
+            if verbose > 1 and weight > 0:
+                print '\tweight %s\tratio1 %s, raw %s\tratio2 %s, raw %s' % (round(weight, 2), round(size1/total_size, 2),
+                                                                             round(min(c1_genes, links)/c1_genes, 2),
+                                                                             round(size2/total_size, 2),
+                                                                             round(min(c2_genes, links)/c2_genes, 2))
         else:
+            both = float(c1_genes + c2_genes)
             weight = min(c1_genes, links)/both + min(c2_genes, links)/both
         if weight == 0.0:
             if verbose > 3:
