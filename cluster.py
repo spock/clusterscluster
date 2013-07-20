@@ -176,7 +176,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     weights_intra = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
-    # Two lists of 2-tuples with perfect (weight 1.0) links between clusters.
+    # Two lists of 2-tuples with weight > threshold links between clusters.
     intra_one = []
     inter_one = []
     # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
@@ -264,7 +264,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             print 'weight', weight
             print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
             raise
-        if weight == 1.0:
+        if weight >= threshold:
             if c1[0] == c2[0]:
                 intra_one.append((c1, c2))
             else:
@@ -410,8 +410,8 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
                 coords2numbers[s][(start, end)] = cluster_number
                 clustersizes[(s, cluster_number)] = end - start
-                if verbose > 2:
-                    print '\tadding cluster %s (%s) at (%s, %s), %s bp long' % (cluster_number, f.qualifiers['product'][0], start, end, end-start)
+                if verbose > 1:
+                    print '\t(%s, %s): %s [%s, %s], %s bp long' % (s, cluster_number, f.qualifiers['product'][0], start, end, end-start)
         if verbose > 2:
             print '\tNow assigning genes to biosynthetic clusters'
         num_genes = 0
@@ -672,12 +672,12 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
 
 
     if verbose > 1:
-        print 'All pairs of clusters with link weight 1.0 (inter-species).'
+        print 'All pairs of clusters with link weight over %s (inter-species).' % threshold
         pprint(inter_one)
 #        for pair in inter_one:
 #            print pair,
         print
-        print 'All pairs of clusters with link weight 1.0 (intra-species).'
+        print 'All pairs of clusters with link weight over %s (intra-species).' % threshold
         pprint(intra_one)
 #        for pair in intra_one:
 #            print pair,
@@ -840,6 +840,7 @@ USAGE
     parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
+    parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
@@ -849,18 +850,18 @@ USAGE
     trim = not args.no_trim
 
     global verbose
+    global height
+    height = args.height
     if args.debug:
         verbose = 10
     else:
         verbose = args.verbose
-#    recurse = args.recurse
-#    inpat = args.include
-#    expat = args.exclude
+
 #    if inpat and expat and inpat == expat:
 #        raise CLIError("include and exclude pattern are equal! Nothing will be processed.")
-#    for inpath in paths:
-#        ### do something with inpath ###
-#        print(inpath)
+
+    print 'Used arguments and options:'
+    pprint(args)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
             strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
