@@ -133,7 +133,7 @@ def bin_key(weight):
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, ortho = False, sizes = False, names = False):
+            skipp = False, strict = False, ortho = False, sizes = False, names = False, scale = False):
     '''Main method which does all the work.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -144,7 +144,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
     for the backteriocin-t1pks cluster).
     "skipp" means "skip putative clusters", if set.
-    "ortho", if True, will only use orthology clusters which do not have'''
+    "ortho", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
+    "sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
+    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
 
     # Declare important variables.
     # Mapping of each gene to the clusterID(s) it belongs to.
@@ -247,10 +249,10 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # was too optimistic: 0.53 for links = 1, c1 = 1, c2 = 20.
         # The least biased formula is below. It properly penalizes if the c1_genes and
         # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
+        size1 = float(clustersizes[c1])
+        size2 = float(clustersizes[c2])
         if sizes:
             # Use relative physical cluster sizes as link contribution weight.
-            size1 = float(clustersizes[c1])
-            size2 = float(clustersizes[c2])
             total_size = float(size1 + size2)
             weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
             if verbose > 2 and weight > 0:
@@ -259,6 +261,10 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         else:
             both = float(c1_genes + c2_genes)
             weight = links1/both + links2/both
+        if scale:
+            if verbose > 2: print '\tscaled weight', round(weight, 2), 'to',
+            weight = weight * min(size1, size2) / max(size1, size2)
+            if verbose > 2: print round(weight, 2)
         try:
             assert weight <= 1.0001 # precision allowance
         except:
@@ -412,7 +418,7 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
                 coords2numbers[s][(start, end)] = cluster_number
                 clustersizes[(s, cluster_number)] = end - start
                 if verbose > 1:
-                    print '\t(%s, %s): %s [%s, %s], %s bp long' % (s, cluster_number, f.qualifiers['product'][0], start, end, end-start)
+                    print '''\t('%s', %s): %s [%s, %s], %s bp long''' % (s, cluster_number, f.qualifiers['product'][0], start, end, end-start)
         if verbose > 2:
             print '\tNow assigning genes to biosynthetic clusters'
         num_genes = 0
@@ -472,9 +478,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         num_pairs += 1
         weight = calculate_weight(c1, c2)
         if verbose > 3:
-            print '\tassigned weight', weight, 'to', c1, 'and', c2
+            print '\tassigned weight', round(weight, 2), 'to', c1, 'and', c2
         elif verbose > 2 and weight > 0.0:
-            print '\tassigned weight', weight, 'to', c1, 'and', c2
+            print '\tassigned weight', round(weight, 2), 'to', c1, 'and', c2
         weight_bins[bin_key(weight)] += 1
         if weight >= threshold:
             if c1 not in cluster_weights:
@@ -832,6 +838,7 @@ USAGE
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
+    parser.add_argument("--scale", dest="scale", action="store_true", default=False, help="scale link weight down by a factor of min(size1, size2)/max(size1, size2) [default: %(default)s]")
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
     parser.add_argument("--no-names", dest="no_names", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names problems [default: %(default)s]")
     parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] problems [default: %(default)s]")
@@ -862,7 +869,7 @@ USAGE
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
             strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
-            names=args.no_names)
+            names=args.no_names, scale=args.scale)
     return 0
 #    except KeyboardInterrupt:
 #        ### handle keyboard interrupt ###
