@@ -129,7 +129,7 @@ def bin_key(weight):
     if weight <= 0.85: return 0.85
     if weight <= 0.90: return 0.9
     if weight <= 0.95: return 0.95
-    if weight <= 1.00: return 1.0
+    return 1.0
 
 
 def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
@@ -212,27 +212,29 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     def calculate_weight(c1, c2):
         c1_genes = len(cluster2genes[c1[0]][c1[1]])
         c2_genes = len(cluster2genes[c2[0]][c2[1]])
-        links1 = calculate_links(c1, c2)
-        links2 = calculate_links(c2, c1)
+        links1 = float(min(calculate_links(c1, c2), c1_genes))
+        links2 = float(min(calculate_links(c2, c1), c2_genes))
         if verbose > 3:
             print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2, '(%s and %s genes)' % (c1_genes, c2_genes)
-        links = max(links1, links2)
-        if links > max(c1_genes, c2_genes):
-            links = max(c1_genes, c2_genes)
         if strict:
-            if links > c1_genes or links > c2_genes:
-                links = min(c1_genes, c2_genes)
+            # No link can be larger than the number of genes in the 2nd cluster.
+            if links1 > c2_genes:
+                links1 = float(c2_genes)
                 if verbose > 3:
-                    print 'strict mode, new links is', links
-        try:
-            assert links <= c1_genes or links <= c2_genes
-        except:
-            if verbose > 2:
-                print 'c1', c1, 'c2', c2
-                print 'c1_genes (c1)', c1_genes, cluster2genes[c1[0]][c1[1]]
-                print 'c2_genes (c2)', c2_genes, cluster2genes[c2[0]][c2[1]]
-                print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
-            raise
+                    print 'strict mode, new links1 is', links1
+            if links2 > c1_genes:
+                links2 = float(c1_genes)
+                if verbose > 3:
+                    print 'strict mode, new links2 is', links2
+            try:
+                assert links1 <= min(c1_genes, c2_genes) and links2 <= min(c1_genes, c2_genes)
+            except:
+                if verbose > 2:
+                    print 'c1', c1, 'c2', c2
+                    print 'c1_genes (c1)', c1_genes, cluster2genes[c1[0]][c1[1]]
+                    print 'c2_genes (c2)', c2_genes, cluster2genes[c2[0]][c2[1]]
+                    print 'links1', links1, 'links2', links2, 'c1_genes', c1_genes, 'c2_genes', c2_genes
+                raise
         # Link weight formula.
         # Multiple versions were tried/examined.
         # 1. weight = links/min(c1_genes, c2_genes)
@@ -247,27 +249,21 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
         if sizes:
             # Use relative physical cluster sizes as link contribution weight.
-            size1 = clustersizes[c1]
-            size2 = clustersizes[c2]
+            size1 = float(clustersizes[c1])
+            size2 = float(clustersizes[c2])
             total_size = float(size1 + size2)
-            weight = (size1/total_size) * min(c1_genes, links)/c1_genes + (size2/total_size) * min(c2_genes, links)/c2_genes
+            weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
             if verbose > 2 and weight > 0:
-                print '\tweight %s\tratio1 %s, raw %s\tratio2 %s, raw %s' % (round(weight, 2), round(size1/total_size, 2),
-                                                                             round(min(c1_genes, links)/c1_genes, 2),
-                                                                             round(size2/total_size, 2),
-                                                                             round(min(c2_genes, links)/c2_genes, 2))
+                print '\tweight %s\t%s of %s\t+\t%s of %s' % (round(weight, 2), round(size1/total_size, 2), round(links1/c1_genes, 2),
+                                                              round(size2/total_size, 2), round(links2/c2_genes, 2))
         else:
             both = float(c1_genes + c2_genes)
-            weight = min(c1_genes, links)/both + min(c2_genes, links)/both
-        if weight == 0.0:
-            if verbose > 3:
-                print 'c1', c1, 'c2', c2, 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
-            return weight
+            weight = links1/both + links2/both
         try:
-            assert weight <= 1.0
+            assert weight <= 1.0001 # precision allowance
         except:
             print 'weight', weight
-            print 'links', links, 'c1_genes', c1_genes, 'c2_genes', c2_genes
+            print 'links1', links1, 'links2', links2, 'c1_genes', c1_genes, 'c2_genes', c2_genes
             raise
         if weight >= threshold:
             if c1[0] == c2[0]:
