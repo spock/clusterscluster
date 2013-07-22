@@ -682,11 +682,11 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         print 'All pairs of clusters with link weight over %s (inter-species).' % threshold
 #        pprint(inter_one)
         for (cl1, t1, cl2, t2, w) in inter_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
+            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
         print 'All pairs of clusters with link weight over %s (intra-species).' % threshold
 #        pprint(intra_one)
         for (cl1, t1, cl2, t2, w) in intra_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
+            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
         print
 
 
