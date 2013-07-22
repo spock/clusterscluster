@@ -273,9 +273,9 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
             raise
         if weight >= threshold:
             if c1[0] == c2[0]:
-                intra_one.append((c1, numbers2products[c1[0]][c1[1]], c2, numbers2products[c2[0]][c2[1]], round(weight, 2)))
+                intra_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
             else:
-                inter_one.append((c1, numbers2products[c1[0]][c1[1]], c2, numbers2products[c2[0]][c2[1]], round(weight, 2)))
+                inter_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
         return weight
 
 
@@ -681,12 +681,14 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
     if verbose > 1:
         print 'All pairs of clusters with link weight over %s (inter-species).' % threshold
 #        pprint(inter_one)
-        for (cl1, t1, cl2, t2, w) in inter_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
+        print 'Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight'
+        for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in inter_one:
+            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w))
         print 'All pairs of clusters with link weight over %s (intra-species).' % threshold
 #        pprint(intra_one)
-        for (cl1, t1, cl2, t2, w) in intra_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, cl2[0], cl2[1], t2, w))
+        print 'Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight'
+        for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in intra_one:
+            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w))
         print
 
 
