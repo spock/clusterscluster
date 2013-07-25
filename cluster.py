@@ -9,33 +9,15 @@ calculates "links" between biosynthetic clusters in those genomes. A "link"
 between any two clusters exists, if at least one pair of genes in those
 clusters belong to the same cluster of orthologs. Each link also has a weight
 assigned to it, which tells the fraction of the orthologs between the two clusters.
-
-It defines classes_and_methods
-
-@author:     bogdan
-
-@copyright:  2013 organization_name. All rights reserved.
-
-@license:    license
-
-@contact:    user_email
-@deffield    updated: Updated
 '''
 
 
-# TODO:
-# - calculate "cluster weight" as an average of all link weights
-# - add cluster-level threshold (by cluster weight)
-
-
 import sys
-import os
 import csv
 import itertools
 from pprint import pprint
 
 from argparse import ArgumentParser
-from argparse import RawDescriptionHelpFormatter
 from Bio import SeqIO
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
@@ -47,7 +29,7 @@ import hmm_detection
 __all__ = []
 __version__ = 0.3
 __date__ = '2013-07-10'
-__updated__ = '2013-07-15'
+__updated__ = '2013-07-25'
 
 
 TESTRUN = 0
@@ -798,45 +780,13 @@ def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = Tr
         print '%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s)
 
 
-#class CLIError(Exception):
-#    '''Generic exception to raise and log different fatal errors.'''
-#    def __init__(self, msg):
-#        super(CLIError).__init__(type(self))
-#        self.msg = "E: %s" % msg
-#    def __str__(self):
-#        return self.msg
-#    def __unicode__(self):
-#        return self.msg
-
-
-def main(argv=None): # IGNORE:C0111
+def main():
     '''Command line options.'''
-
-    if argv is None:
-        argv = sys.argv
-    else:
-        sys.argv.extend(argv)
-
-    program_name = os.path.basename(sys.argv[0])
     program_version = "v%s" % __version__
     program_build_date = str(__updated__)
     program_version_message = '%%(prog)s %s (%s)' % (program_version, program_build_date)
-    program_shortdesc = __import__('__main__').__doc__.split("\n")[1]
-    program_license = '''%s
 
-  Created by user_name on %s.
-  Copyright 2013 organization_name. All rights reserved.
-
-  Licensed under the Apache License 2.0
-  http://www.apache.org/licenses/LICENSE-2.0
-
-  Distributed on an "AS IS" basis without warranties
-  or conditions of any kind, either express or implied.
-
-USAGE
-''' % (program_shortdesc, str(__date__))
-
-    parser = ArgumentParser(description=program_license, formatter_class=RawDescriptionHelpFormatter)
+    parser = ArgumentParser()
     parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up -vvv [default: %(default)s]")
     parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
@@ -853,10 +803,7 @@ USAGE
     parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
-
-    # Process arguments
     args = parser.parse_args()
-    trim = not args.no_trim
 
     global verbose
     global height
@@ -866,43 +813,15 @@ USAGE
     else:
         verbose = args.verbose
 
-#    if inpat and expat and inpat == expat:
-#        raise CLIError("include and exclude pattern are equal! Nothing will be processed.")
 
     print 'Used arguments and options:'
     pprint(args)
     process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
-            paths=args.paths, threshold=args.threshold, trim=trim, skipp=args.skipp,
+            paths=args.paths, threshold=args.threshold, trim= not args.no_trim, skipp=args.skipp,
             strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
             names=args.no_names, scale=args.scale)
     return 0
-#    except KeyboardInterrupt:
-#        ### handle keyboard interrupt ###
-#        return 0
-#    except Exception, e:
-#        if DEBUG or TESTRUN:
-#            raise(e)
-#        indent = len(program_name) * " "
-#        sys.stderr.write(program_name + ": " + repr(e) + "\n")
-#        sys.stderr.write(indent + "  for help use --help")
-#        return 2
+
 
 if __name__ == "__main__":
-#    if DEBUG:
-#        sys.argv.append("-h")
-#        sys.argv.append("-v")
-    if TESTRUN:
-        import doctest
-        doctest.testmod()
-    if PROFILE:
-        import cProfile
-        import pstats
-        profile_filename = 'cluster_profile.txt'
-        cProfile.run('main()', profile_filename)
-        statsfile = open("profile_stats.txt", "wb")
-        p = pstats.Stats(profile_filename, stream=statsfile)
-        stats = p.strip_dirs().sort_stats('cumulative')
-        stats.print_stats()
-        statsfile.close()
-        sys.exit(0)
     sys.exit(main())
