@@ -72,7 +72,8 @@ def print_cluster_numbers_row(s2c, species, tee):
 
 
 def parse_cluster_number(note):
-    'given a list of items from "note" field, return cluster number'
+    '''Given a list of items from the "note" field of the GenBank feature,
+    created by Antismash2, return cluster number.'''
     for i in note:
         if i.startswith('Cluster number: '):
             return int(i[16:])
