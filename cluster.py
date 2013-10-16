@@ -115,9 +115,10 @@ def bin_key(weight):
     return 1.0
 
 
-def process(config, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
+def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
             skipp = False, strict = False, ortho = False, sizes = False, names = False, scale = False):
     '''Main method which does all the work.
+    "species" is the path to the file containing all strains in the analysis.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
     "threshold" is a biocluster-biocluster link weight threshold.
@@ -801,7 +802,7 @@ def main():
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
-    parser.add_argument(dest="config", help="path to plain-text species list file", metavar="config")
+    parser.add_argument(dest="species", help="path to plain-text species list file", metavar="species")
     parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
     args = parser.parse_args()
@@ -817,7 +818,7 @@ def main():
 
     print 'Used arguments and options:'
     pprint(args)
-    process(prefix=args.prefix, config=args.config, paranoid=args.paranoid,
+    process(prefix=args.prefix, species=args.species, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim= not args.no_trim, skipp=args.skipp,
             strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
             names=args.no_names, scale=args.scale)
