@@ -13,7 +13,7 @@ assigned to it, which tells the fraction of the orthologs between the two cluste
 
 
 import sys
-import csv
+import logging
 import itertools
 from pprint import pprint
 
@@ -22,7 +22,7 @@ from Bio import SeqIO
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 
-
+import MultiParanoid as MP
 import hmm_detection
 
 
@@ -132,11 +132,9 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     "sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
     "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
 
+    mp = MP.MultiParanoid(paranoid)
+
     # Declare important variables.
-    # Mapping of each gene to the clusterID(s) it belongs to.
-    gene2ortho = {}
-    # List of all the genes in the cluster with given clusterID.
-    ortho2genes = {}
     # List of recognized species.
     species = []
     # List of all clusters from all species.
@@ -147,11 +145,6 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     genbank = {}
     # Dict of per-species interval trees of clusters.
     clustertrees = {}
-    # Dict of per-species dicts of cluster-to-gene relations.
-    # Each cluster dict uses a key = (species, number).
-    cluster2genes = {}
-    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
-    gene2clusters = {}
     # Per-species mapping of cluster coordinates tuple to their numbers.
     coords2numbers = {}
     # 2-level nested dict of cluster pairs link weights, e.g. cluster_weights['A'] = {'B': 0.95, ...}
@@ -162,6 +155,11 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     weights_intra = {}
     # Mapping of record.names from GenBank files (LOCUS) to species.
     locus2species = {}
+    # Dict of per-species dicts of cluster-to-gene relations.
+    # Each cluster dict uses a key = (species, number).
+    cluster2genes = {}
+    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
+    gene2clusters = {}
     # Two lists of 2-tuples with weight > threshold links between clusters.
     intra_one = []
     inter_one = []
@@ -170,24 +168,31 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 
 
     def get_gene_links_to_bioclusters(gene):
-        if gene not in gene2ortho:
+        '''For the given gene,
+        - find to which orthology group/cluster it belongs,
+        - check if other genes from that group are a part of some biosynthetic clusters,
+        - return the list of those biosynthetic clusters'''
+        if gene not in mp.gene2ortho:
             return []
         bioclusters = []
-        for orthoclust in gene2ortho[gene]:
+        for orthoclust in mp.gene2ortho[gene]:
             if verbose > 3:
                 print 'gene', gene, 'belongs to ortho-cluster', orthoclust
-            for xeno_gene in ortho2genes[orthoclust]:
+            for xeno_gene in mp.ortho2genes[orthoclust]:
                 # Extract LOCUS from gene name, find species from it.
                 xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
                 # Check if xeno_gene belongs to any biosynthetic clusters.
                 if xeno_gene in gene2clusters[xeno_species]:
                     bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
                     if verbose > 3:
-                        print '\txeno_gene', xeno_gene, 'belongs to', gene2clusters[xeno_species][xeno_gene]
+                        print '\txeno_gene', xeno_gene, 'belongs to',
+                        print gene2clusters[xeno_species][xeno_gene]
         return bioclusters
 
 
     def calculate_links(c1, c2):
+        '''Given biosynthetic clusters c1 and c2, count the number of unique
+        orthologoues gene pairs ("links") between them.'''
         links = 0
         for gene in cluster2genes[c1[0]][c1[1]]:
             if c2 in get_gene_links_to_bioclusters(gene):
@@ -196,6 +201,8 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 
 
     def calculate_weight(c1, c2):
+        '''Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
+        link between them.'''
         c1_genes = len(cluster2genes[c1[0]][c1[1]])
         c2_genes = len(cluster2genes[c2[0]][c2[1]])
         links1 = float(min(calculate_links(c1, c2), c1_genes))
@@ -261,40 +268,6 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             else:
                 inter_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
         return weight
-
-
-    if verbose > 0:
-        print 'Reading quick/multi-paranoid gene clusters:'
-    with open(paranoid) as tsv:
-        # Sample line:
-        # 1    avermitilis_MA4680.faa    SAV_1680.BA000030    1    1.000    Kitasatospora_setae_DSM43861.faa-SirexAA_E.faa-albus_J1074.faa-avermitilis_MA4680.faa-cattleya_DSM46488.faa-coelicolor_A3_2.faa-flavogriseus_IAF45CD.faa-griseus_NBRC13350.faa-scabiei_87.22.faa-venezuelae_Shinobu_719.faa-violaceusniger_Tu4113.faa    diff. numbers
-        # fieldnames = ['#clusterID', 'species', 'gene', 'is_seed_ortholog', 'confidence', 'species_in_cluster', 'tree_conflict']
-        reader = csv.DictReader(tsv, delimiter = '\t')
-        try:
-            for row in reader:
-                # Understand both Multi- and Quick-paranoid files.
-                if '#clusterID' in row:
-                    # QuickParanoid
-                    idname = '#clusterID'
-                else:
-                    # MultiParanoid
-                    idname = 'clusterID'
-                # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
-                if (ortho and row['tree_conflict'] != 'No') or (names and row['tree_conflict'] == 'diff. names'):
-                    continue
-                if row['gene'] not in gene2ortho:
-                    gene2ortho[row['gene']] = []
-                gene2ortho[row['gene']].append(row[idname])
-                # Build cluster-ID-to-all-genes dict of lists. row[idname] is the cluster number.
-                if row[idname] not in ortho2genes:
-                    ortho2genes[row[idname]] = []
-                ortho2genes[row[idname]].append(row['gene'])
-        except csv.Error as e:
-            sys.exit('file %s, line %d: %s' % (paranoid, reader.line_num, e))
-    if verbose > 0:
-        print '\ttotal lines read:', reader.line_num
-        print '\ttotal entries in gene2ortho:', len(gene2ortho)
-        print '\ttotal entries in ortho2genes:', len(ortho2genes)
 
 
     if verbose > 0:
@@ -802,18 +775,20 @@ def main():
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
-    parser.add_argument(dest="species", help="path to plain-text species list file", metavar="species")
-    parser.add_argument(dest="paranoid", help="path multiparanoid/quickparanoid sqltable file", metavar="sqltable")
-    parser.add_argument(dest="paths", help="paths to GenBank files annotated with antismash2", metavar="path", nargs='+')
+    parser.add_argument(dest="species", help="path to the plain-text species list file", metavar="species")
+    parser.add_argument(dest="paranoid", help="path to the multiparanoid/quickparanoid sqltable file", metavar="sqltable")
+    parser.add_argument(dest="paths", help="paths to the GenBank files annotated with antismash2", metavar="path", nargs='+')
     args = parser.parse_args()
 
-    global verbose
+    if args.debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
+
     global height
     height = args.height
-    if args.debug:
-        verbose = 10
-    else:
-        verbose = args.verbose
 
 
     print 'Used arguments and options:'
