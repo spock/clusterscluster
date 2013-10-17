@@ -12,6 +12,7 @@ assigned to it, which tells the fraction of the orthologs between the two cluste
 '''
 
 
+from __future__ import print_function
 import sys
 import logging
 import itertools
@@ -116,7 +117,8 @@ def bin_key(weight):
 
 
 def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, ortho = False, sizes = False, names = False, scale = False):
+            skipp = False, strict = False, ortho = False, sizes = False, names = False,
+            scale = False):
     '''Main method which does all the work.
     "species" is the path to the file containing all strains in the analysis.
     "paranoid" is the path to multi/quick-paranoid output file.
@@ -129,6 +131,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     for the backteriocin-t1pks cluster).
     "skipp" means "skip putative clusters", if set.
     "ortho", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
+    "names": as "ortho" above, but for the name_conflict column.
     "sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
     "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
 
@@ -176,17 +179,15 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             return []
         bioclusters = []
         for orthoclust in mp.gene2ortho[gene]:
-            if verbose > 3:
-                print 'gene', gene, 'belongs to ortho-cluster', orthoclust
+            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
             for xeno_gene in mp.ortho2genes[orthoclust]:
                 # Extract LOCUS from gene name, find species from it.
                 xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
                 # Check if xeno_gene belongs to any biosynthetic clusters.
                 if xeno_gene in gene2clusters[xeno_species]:
                     bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
-                    if verbose > 3:
-                        print '\txeno_gene', xeno_gene, 'belongs to',
-                        print gene2clusters[xeno_species][xeno_gene]
+                    logging.debug('\txeno_gene %s belongs to %s', xeno_gene,
+                                  gene2clusters[xeno_species][xeno_gene])
         return bioclusters
 
 
@@ -207,26 +208,24 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         c2_genes = len(cluster2genes[c2[0]][c2[1]])
         links1 = float(min(calculate_links(c1, c2), c1_genes))
         links2 = float(min(calculate_links(c2, c1), c2_genes))
-        if verbose > 3:
-            print '\tlinks1 =', links1, 'and links2 =', links2, 'for', c1, c2, '(%s and %s genes)' % (c1_genes, c2_genes)
+        logging.debug('\tlinks1 = %s and links2 = %s for %s and %s (%s and %s genes)',
+                      links1, links2, c1, c2, c1_genes, c2_genes)
         if strict:
             # No link can be larger than the number of genes in the 2nd cluster.
             if links1 > c2_genes:
                 links1 = float(c2_genes)
-                if verbose > 3:
-                    print 'strict mode, new links1 is', links1
+                logging.debug('strict mode, new links1 is %s', links1)
             if links2 > c1_genes:
                 links2 = float(c1_genes)
-                if verbose > 3:
-                    print 'strict mode, new links2 is', links2
+                logging.debug('strict mode, new links2 is %s', links2)
             try:
                 assert links1 <= min(c1_genes, c2_genes) and links2 <= min(c1_genes, c2_genes)
             except:
-                if verbose > 2:
-                    print 'c1', c1, 'c2', c2
-                    print 'c1_genes (c1)', c1_genes, cluster2genes[c1[0]][c1[1]]
-                    print 'c2_genes (c2)', c2_genes, cluster2genes[c2[0]][c2[1]]
-                    print 'links1', links1, 'links2', links2, 'c1_genes', c1_genes, 'c2_genes', c2_genes
+                logging.exception('c1: %s ; c2: %s', c1, c2)
+                logging.exception('c1_genes: %s (c1: %s)', c1_genes, cluster2genes[c1[0]][c1[1]])
+                logging.exception('c2_genes: %s (c2: %s)', c2_genes, cluster2genes[c2[0]][c2[1]])
+                logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
+                                  links1, links2, c1_genes, c2_genes)
                 raise
         # Link weight formula.
         # Multiple versions were tried/examined.
@@ -246,21 +245,22 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             # Use relative physical cluster sizes as link contribution weight.
             total_size = float(size1 + size2)
             weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
-            if verbose > 2 and weight > 0:
-                print '\tweight %s\t%s of %s\t+\t%s of %s' % (round(weight, 2), round(size1/total_size, 2), round(links1/c1_genes, 2),
-                                                              round(size2/total_size, 2), round(links2/c2_genes, 2))
+            if weight > 0:
+                logging.debug('\tweight %s\t%s of %s\t+\t%s of %s', round(weight, 2),
+                              round(size1/total_size, 2), round(links1/c1_genes, 2),
+                              round(size2/total_size, 2), round(links2/c2_genes, 2))
         else:
             both = float(c1_genes + c2_genes)
             weight = links1/both + links2/both
         if scale:
-            if verbose > 2: print '\tscaled weight', round(weight, 2), 'to',
-            weight = weight * min(size1, size2) / max(size1, size2)
-            if verbose > 2: print round(weight, 2)
+            weight2 = weight * min(size1, size2) / max(size1, size2)
+            logging.debug('\tscaled weight %s to %s', round(weight, 2), round(weight2, 2))
         try:
             assert weight <= 1.0001 # precision allowance
         except:
-            print 'weight', weight
-            print 'links1', links1, 'links2', links2, 'c1_genes', c1_genes, 'c2_genes', c2_genes
+            logging.exception('weight: %s', weight)
+            logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
+                              links1, links2, c1_genes, c2_genes)
             raise
         if weight >= threshold:
             if c1[0] == c2[0]:
@@ -270,17 +270,14 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         return weight
 
 
-    if verbose > 0:
-        print 'Reading species list file:'
-    for s in open(config):
+    print('Reading species list file:')
+    for s in open(species):
         species.append(s.strip())
     species.sort(key = lambda s: s.lower())
-    if verbose > 0:
-        print '\ttotal species:', len(species)
+    print('\ttotal species: %s' % len(species))
 
 
-    if verbose > 0:
-        print 'Reading all genbank files in parallel:'
+    logging.info('Reading all genbank files in parallel.')
     task_queue = Queue()
     done_queue = Queue()
 
@@ -300,8 +297,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     for gb in paths:
         for s in species:
             if s[0:5] == gb[0:5]:
-                if verbose > 1:
-                    print '\t%s corresponds to species %s' % (gb, s)
+                logging.info('\t%s corresponds to species %s', gb, s)
                 break
         task_queue.put((s, gb))
     for i in range(cpu_count()):
@@ -310,22 +306,18 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         s, rec = done_queue.get()
         genbank[s] = rec
         locus2species[genbank[s].name] = s
-    if verbose > 0:
-        print '\ttotal records parsed:', len(genbank)
+    print('\ttotal records parsed: %s' % len(genbank))
     task_queue.close()
     done_queue.close()
 
 
-    if verbose > 0:
-        print 'Parsing clusters and assigning genes to them:'
-    if verbose > 1:
-        print '\tgetting extension sizes for diff. cluster types from antismash2 config'
+    print('Parsing clusters and assigning genes to them:')
+    logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
     rulesdict = hmm_detection.create_rules_dict()
-    if trim and verbose > 1:
-        print '\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.'
+    if trim:
+        logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
     for s in species:
-        if verbose > 2:
-            print '\tprocessing', s
+        logging.debug('\tprocessing %s', s)
         clustertrees[s] = IntervalTree()
         cluster2genes[s] = {}
         numbers2products[s] = {}
@@ -338,9 +330,8 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
                 if skipp and f.qualifiers['product'][0] == 'putative':
-                    if verbose > 2:
-                        print '\tskipping putative cluster #%s at (%s, %s)' % \
-                                (cluster_number, start, end)
+                    logging.debug('\tskipping putative cluster #%s at (%s, %s)',
+                                  cluster_number, start, end)
                     continue
                 # Putative clusters have neither extensions nor rules for them.
                 if trim and f.qualifiers['product'][0] != 'putative':
@@ -348,25 +339,24 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                     extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
                     # If cluster is at the genome edge - skip extension trimming.
                     if start == 0:
-                        if verbose > 1:
-                            print '\tnot trimming left-extension for #%s (%s) - at the genome start' % \
-                                   (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                        logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
+                                     parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
                     else:
                         start += extension
                     if end == len(genbank[s]):
-                        if verbose > 1:
-                            print '\tnot trimming right-extension for #%s (%s) - at the genome end' % \
-                                   (parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                        logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
+                                     parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
                     else:
                         end -= extension
                     try:
                         assert start < end
                     except:
-                        print 'trimming extension failed for: '
-                        print f.qualifiers['product'][0], '(%s)' % parse_cluster_number(f.qualifiers['note'])
-                        print 'extension', extension
-                        print 'ori start %s, new start %s' % (f.location.start.position, start)
-                        print 'ori  end %s, new  end %s' % (f.location.end.position, end)
+                        logging.exception('trimming extension failed for: ')
+                        logging.exception('%s (%s)', f.qualifiers['product'][0],
+                                          parse_cluster_number(f.qualifiers['note']))
+                        logging.exception('extension %s', extension)
+                        logging.exception('ori start %s, new start %s', f.location.start.position, start)
+                        logging.exception('ori  end %s, new  end %s', f.location.end.position, end)
                         raise
                 clustertrees[s].add_interval(Interval(start, end))
                 cluster2genes[s][cluster_number] = []
@@ -374,10 +364,9 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                 numbers2products[s][cluster_number] = f.qualifiers['product'][0]
                 coords2numbers[s][(start, end)] = cluster_number
                 clustersizes[(s, cluster_number)] = end - start
-                if verbose > 1:
-                    print '''\t('%s', %s): %s [%s, %s], %s bp long''' % (s, cluster_number, f.qualifiers['product'][0], start, end, end-start)
-        if verbose > 2:
-            print '\tNow assigning genes to biosynthetic clusters'
+                logging.info('''\t('%s', %s): %s [%s, %s], %s bp long''', s, cluster_number,
+                             f.qualifiers['product'][0], start, end, end-start)
+        logging.info('\tNow assigning genes to biosynthetic clusters')
         num_genes = 0
         for f in genbank[s].features:
             if f.type == 'CDS':
@@ -391,37 +380,34 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                         qualifier = 'gene'
                     gene_name = f.qualifiers[qualifier][0] + '.' + genbank[s].name
                     # One gene may belong to more than one cluster.
-                    if verbose > 2:
-                        print '\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)' % (f.location.start.position, f.location.end.position, len(cl), cl[0].start, cl[0].end)
+                    logging.debug('\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)',
+                                  f.location.start.position, f.location.end.position,
+                                  len(cl), cl[0].start, cl[0].end)
                     num_genes += 1
                     gene2clusters[s][gene_name] = []
                     for cluster in cl:
                         cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
                         gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
-        if verbose > 1:
-            print '\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes)
+        print('\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes))
     # Extra verification.
     for s in species:
         for num, cl in cluster2genes[s].iteritems():
             try:
                 assert len(cl) > 0
             except:
-                print 'cluster %s of %s has 0 genes' % (num, s)
+                print('cluster %s of %s has 0 genes' % (num, s))
                 raise
-    if verbose > 0:
-        print '\tadded %s clusters from %s species' % (len(all_clusters), len(species))
+    print('\tadded %s clusters from %s species' % (len(all_clusters), len(species)))
     # Sort by species.lower() to ensure stable order of cluster pairs.
     all_clusters.sort(key = lambda s: s[0].lower())
 
 
-    if verbose > 2:
-        print 'Freeing memory.'
+    logging.debug('Freeing memory.')
     del genbank
     del clustertrees
 
 
-    if verbose > 0:
-        print 'Constructing gene-based cluster links.'
+    print('Constructing gene-based cluster links.')
     pairs = itertools.combinations(all_clusters, 2)
     # Simple counters of the number of cluster pairs/weights we are processing.
     num_pairs = 0
@@ -434,10 +420,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     for (c1, c2) in pairs:
         num_pairs += 1
         weight = calculate_weight(c1, c2)
-        if verbose > 3:
-            print '\tassigned weight', round(weight, 2), 'to', c1, 'and', c2
-        elif verbose > 2 and weight > 0.0:
-            print '\tassigned weight', round(weight, 2), 'to', c1, 'and', c2
+        logging.debug('\tassigned weight %s to %s and %s', round(weight, 2), c1, c2)
         weight_bins[bin_key(weight)] += 1
         if weight >= threshold:
             if c1 not in cluster_weights:
@@ -446,27 +429,24 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                 cluster_weights[c2] = {}
             cluster_weights[c1][c2] = weight
             cluster_weights[c2][c1] = weight
-    if verbose > 1:
-        print '\tGenerated %s pairs between %s clusters' % (num_pairs, len(all_clusters))
-    if verbose > 0:
-        print 'Distribution of %s weights (bins of size 0.05)' % num_pairs
-        print 'bin\tweights\tgraph'
-        # Maximal 'width' of 1 bar.
-        height = 120
-        for x in range(5, 105, 5):
-            x = x/100.0
-            val = weight_bins[x]
-            bar = '#' * int(round(height*val/num_pairs))
-            print '%s\t%s\t%s' %(x, val, bar)
+    print('\tGenerated %s pairs between %s clusters' % (num_pairs, len(all_clusters)))
+    print('Distribution of %s weights (bins of size 0.05)' % num_pairs)
+    print('bin\tweights\tgraph')
+    # Maximal 'width' of 1 bar.
+    height = 120
+    for x in range(5, 105, 5):
+        x = x/100.0
+        val = weight_bins[x]
+        bar = '#' * int(round(height*val/num_pairs))
+        print('%s\t%s\t%s' % (x, val, bar))
 
 
     # Manual data examination had shown that many multi-links between species
     # have high scores of up 1.0. Removing them may adversely affect the
     # estimation of new clusters potential. This is why multi-link resolution
     # is commented out below.
-    if verbose > 0:
-#        print 'Resolving multi-maps to single species by weight, and removing intra-species links.'
-        print 'Removing intra-species links.'
+#    print 'Resolving multi-maps to single species by weight, and removing intra-species links.'
+    print('Removing intra-species links.')
     # List of cluster pairs we had already iterated, to avoid double-processing.
     skip_list = []
     # Counters for actual remaining cluster link pairs.
@@ -487,8 +467,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         # Iterate all groups, filling weights_clean and weights_intra.
         for s, v in by_species.iteritems():
             if s == c1[0]: # Intra case: link(s) to own cluster(s).
-                if verbose > 3:
-                    print 'intra-species (c1, c2, list):', c1, c2, v
+                logging.debug('intra-species (c1, c2, list): %s, %s, %s', c1, c2, v)
                 if c1 not in weights_intra:
                     weights_intra[c1] = {}
                 for onec in v:
@@ -502,8 +481,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                     weights_clean[c1] = {}
                 if v[0][1] not in weights_clean:
                     weights_clean[v[0][1]] = {}
-                if verbose > 3:
-                    print 'one-to-one:', c1, v[0]
+                logging.debug('one-to-one: %s, %s', c1, v[0])
                 weights_clean[c1][v[0][1]] = v[0][0]
                 weights_clean[v[0][1]][c1] = v[0][0] # mirror
                 num_pairs += 1
@@ -514,8 +492,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 #                weights_clean[c1][best[1]] = best[0]
                 if c1 not in weights_clean:
                     weights_clean[c1] = {}
-                if verbose > 3:
-                    print 'one-to-many:', c1, v
+                logging.debug('one-to-many: %s, %s', c1, v)
 #                    print 'best:', best
                 num_pairs += len(v)
                 for onec in v:
@@ -523,16 +500,14 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                         weights_clean[onec[1]] = {}
                     weights_clean[c1][onec[1]] = onec[0]
                     weights_clean[onec[1]][c1] = onec[0] # mirror
-    if verbose > 0:
-        print '\t%s unique intra-species links' % num_pairs_intra
-    if verbose > 0:
-        print '\t%s unique inter-species links' % num_pairs
+    print('\t%s unique intra-species links' % num_pairs_intra)
+    print('\t%s unique inter-species links' % num_pairs)
     del skip_list
 
 
     def clusters_of_clusters():
         'not used at the moment, possibly not fully functional - not reviewed'
-        print 'Grouping into clusters with 11, 10, ... links.'
+        print('Grouping into clusters with 11, 10, ... links.')
         # Dict grouping weights_clean by the number of links inside.
         by_count = {}
         # Init.
@@ -544,19 +519,19 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             try:
                 assert group_len <= len(species)
             except:
-                print 'group_len', group_len
-                print 'c1', c1
-                print 'nested', nested_dict
+                logging.exception('group_len %s', group_len)
+                logging.exception('c1 %s', c1)
+                logging.exception('nested %s', nested_dict)
                 raise
             by_count[group_len][c1] = nested_dict
-        print 'Summary:'
+        print('Summary:')
         for i in range(len(species), 0, -1):
-            print '\t%s: %s groups' % (i, len(by_count[i]))
+            print('\t%s: %s groups' % (i, len(by_count[i])))
 
         # All output tables have headers, row names, and tab-separated columns.
 
         # Using cluster products, for each group of same-links-count clusters output tables for them:
-        # Clusters with 11 links (a total of XXX):
+        # Clusters with 11 links (a total of NUMBER):
         # sp1 sp2 sp3 ...
         # cl1 cl2 cl3 ...
         # ...
@@ -564,7 +539,8 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             if len(by_count[i]) == 0:
                 continue
             fname = prefix + '_' + str(i) + '_links.csv'
-            print 'Groups of size', i, '(%s)' % len(by_count[i]), 'will be written to file', fname
+            print('Groups of size', i, '(%s)' % len(by_count[i]),
+                  'will be written to file', fname)
             # From here on output goes to both stdout and the file.
             #tee = Tee(fname, 'a')
             tee = open(fname, 'w')
@@ -626,7 +602,8 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                         elif col_key in by_count[i]:
                             tee.write(round(by_count[i][col_key][row_key], 2))
                         else:
-                            print 'Neither', row_key, 'nor', col_key, 'found in cluster_weights.'
+                            print('Neither', row_key, 'nor', col_key,
+                                  'found in cluster_weights.')
                     tee.write('\n')
             tee.close()
     #        del tee
@@ -635,18 +612,19 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             # species are used.
 
 
-    if verbose > 1:
-        print 'All pairs of clusters with link weight over %s (inter-species).' % threshold
+    print('All pairs of clusters with link weight over %s (inter-species).', threshold)
 #        pprint(inter_one)
-        print 'Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight'
-        for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in inter_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w))
-        print 'All pairs of clusters with link weight over %s (intra-species).' % threshold
+    print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
+    for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in inter_one:
+        print('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' %
+              (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w), end='')
+    print('All pairs of clusters with link weight over %s (intra-species).' % threshold)
 #        pprint(intra_one)
-        print 'Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight'
-        for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in intra_one:
-            sys.stdout.write('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' % (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w))
-        print
+    print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
+    for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in intra_one:
+        print('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' %
+              (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w), end='')
+    print()
 
 
     def get_unique_clusters(s, allowed_species = False):
@@ -669,9 +647,9 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 
 
     def graph_unique_change_when_adding(reverse = True):
-        print 'Graph of the change of unique clusters fraction with each new added genome'
+        print('Graph of the change of unique clusters fraction with each new added genome.')
         if not reverse:
-            print '(reversed: from genomes with less clusters to genomes with more)'
+            print('(reversed: from genomes with less clusters to genomes with more)')
         # List of tuples (number_of_clusters, species), for sorting.
         numclust_species = []
         for s in species:
@@ -693,7 +671,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             allowed_species.append(s)
             bar = '#' * int(round(height*ratio))
             bar = bar.ljust(height)
-            print '%s\t%s\t%s' % (bar, ratio, s)
+            print('%s\t%s\t%s' % (bar, ratio, s))
 
 
     graph_unique_change_when_adding()
@@ -703,9 +681,9 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     def cumulative_growth(reverse = True):
         '''Shows expected and observed growth of the number of unique clusters
         with each new genome'''
-        print 'Graph of the ratio of observed/expected total unique clusters.'
+        print('Graph of the ratio of observed/expected total unique clusters.')
         if not reverse:
-            print '(reversed: from genomes with less clusters to genomes with more)'
+            print('(reversed: from genomes with less clusters to genomes with more)')
         # List of tuples (number_of_clusters, species), for sorting.
         numclust_species = []
         for s in species:
@@ -721,7 +699,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         # Horizontal bar "height" (length).
         height = 90
         # Draw a reference 100% line.
-        print '%s\t%s\t%s' % ('#' * height, 1.0, 'Reference')
+        print('%s\t%s\t%s' % ('#' * height, 1.0, 'Reference'))
         for (numclust, s) in numclust_species:
             total_expected += len(cluster2genes[s])
             total_observed += get_unique_clusters(s)
@@ -729,11 +707,11 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             table.append((total_observed, total_expected, round(ratio, 2), s))
             bar = '#' * int(round(height*ratio))
             bar = bar.ljust(height)
-            print '%s\t%s\t%s' % (bar, ratio, s)
-        print 'Data table'
-        print 'Obs.\tExp.\tRatio\tGenome'
+            print('%s\t%s\t%s' % (bar, ratio, s))
+        print('Data table')
+        print('Obs.\tExp.\tRatio\tGenome')
         for item in table:
-            print '%s\t%s\t%s\t%s' % item
+            print('%s\t%s\t%s\t%s' % item)
 
     cumulative_growth()
 #    cumulative_growth(False)
@@ -741,18 +719,18 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 
     # Finally, show a list of all species, stating the number of unique
     # clusters they have.
-    print 'Graph of the percentage of unique clusters in each of the genomes.'
+    print('Graph of the percentage of unique clusters in each of the genomes.')
     height = 60
     # Draw a reference 100% line.
-    print '%s\t%s\t%s\t%s\t%s' % ('Bar'.ljust(height), 'Unique', 'Total', 'Ratio', 'Genome')
-    print '%s\t%s\t%s\t%s\t%s' % ('#' * height, 1.0, 1.0, 1.0, 'Reference')
+    print('%s\t%s\t%s\t%s\t%s' % ('Bar'.ljust(height), 'Unique', 'Total', 'Ratio', 'Genome'))
+    print('%s\t%s\t%s\t%s\t%s' % ('#' * height, 1.0, 1.0, 1.0, 'Reference'))
     for s in species:
         unique = get_unique_clusters(s)
         total = len(cluster2genes[s])
         ratio = round(unique / float(total), 2)
         bar = '#' * int(round(height*ratio))
         bar = bar.ljust(height)
-        print '%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s)
+        print('%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s))
 
 
 def main():
@@ -791,7 +769,7 @@ def main():
     height = args.height
 
 
-    print 'Used arguments and options:'
+    print('Used arguments and options:')
     pprint(args)
     process(prefix=args.prefix, species=args.species, paranoid=args.paranoid,
             paths=args.paths, threshold=args.threshold, trim= not args.no_trim, skipp=args.skipp,
