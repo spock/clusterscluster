@@ -740,8 +740,8 @@ def main():
     program_version_message = '%%(prog)s %s (%s)' % (program_version, program_build_date)
 
     parser = ArgumentParser()
-    parser.add_argument("-v", "--verbose", dest="verbose", action="count", default=0, help="set verbosity level, up -vvv [default: %(default)s]")
-    parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to maximal [default: %(default)s]")
+    parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to debug [default: %(default)s]")
+    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
@@ -760,6 +760,8 @@ def main():
 
     if args.debug:
         level = logging.DEBUG
+    elif args.quiet:
+        level = logging.WARNING
     else:
         level = logging.INFO
     logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
@@ -767,7 +769,6 @@ def main():
 
     global height
     height = args.height
-
 
     print('Used arguments and options:')
     pprint(args)
