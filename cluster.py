@@ -117,8 +117,8 @@ def bin_key(weight):
 
 
 def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, ortho = False, sizes = False, names = False,
-            scale = False):
+            skipp = False, strict = False, no_tree_problems = False, sizes = False,
+            no_name_problems = False, scale = False):
     '''Main method which does all the work.
     "species" is the path to the file containing all strains in the analysis.
     "paranoid" is the path to multi/quick-paranoid output file.
@@ -130,12 +130,12 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
     for the backteriocin-t1pks cluster).
     "skipp" means "skip putative clusters", if set.
-    "ortho", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
-    "names": as "ortho" above, but for the name_conflict column.
+    "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
+    "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
     "sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
     "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
 
-    mp = MP.MultiParanoid(paranoid)
+    mp = MP.MultiParanoid(paranoid, no_tree_problems, no_name_problems)
 
     # Declare important variables.
     # List of recognized species.
@@ -748,8 +748,8 @@ def main():
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--scale", dest="scale", action="store_true", default=False, help="scale link weight down by a factor of min(size1, size2)/max(size1, size2) [default: %(default)s]")
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
-    parser.add_argument("--no-names", dest="no_names", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names problems [default: %(default)s]")
-    parser.add_argument("--no-problems", dest="no_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] problems [default: %(default)s]")
+    parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names tree_conflict problems [default: %(default)s]")
+    parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] tree_conflict problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
@@ -773,9 +773,9 @@ def main():
     print('Used arguments and options:')
     pprint(args)
     process(prefix=args.prefix, species=args.species, paranoid=args.paranoid,
-            paths=args.paths, threshold=args.threshold, trim= not args.no_trim, skipp=args.skipp,
-            strict=args.strict, ortho=args.no_problems, sizes=args.use_sizes,
-            names=args.no_names, scale=args.scale)
+            paths=args.paths, threshold=args.threshold, trim= not args.no_trim,
+            skipp=args.skipp, strict=args.strict, no_tree_problems=args.no_tree_problems,
+            sizes=args.use_sizes, no_name_problems=args.no_name_problems, scale=args.scale)
     return 0
 
 
