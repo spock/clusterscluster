@@ -76,8 +76,8 @@ class MultiParanoid(object):
 
     def gene2species(self, gene):
         '''
-        Given a complex gene ID like SAV_1680.BA000030, return the part before the dot
-        (SAV_1680 in this example), which is the LOCUS of the gene's genome.
+        Given a complex gene ID like SAV_1680.BA000030, return the part after the dot
+        (BA000030 in this example), which is the LOCUS of the gene's genome.
         '''
         return gene[gene.find('.')+1:]
 
