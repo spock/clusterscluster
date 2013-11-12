@@ -51,8 +51,10 @@ class MultiParanoid(object):
         """
         Counts genes/orthologs shared by the specified subset of species.
         'species' is a list, each item is the GenBank LOCUS of the respective genome
-        (e.g. ['SAV_1680']).
+        (e.g. ['BA000030']).
         """
+        # FIXME: numbers returned by this method differ from (are lower than) the original
+        # InParanoid output files.
         # Number of genomes we are looking for.
         N = len(species)
         logging.info('We are looking for genes common to %s genomes.', N)
@@ -72,7 +74,6 @@ class MultiParanoid(object):
             else:
                 common += 1
         return common
-
 
     def gene2species(self, gene):
         '''
