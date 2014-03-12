@@ -1,14 +1,38 @@
 #!/usr/bin/python
 # encoding: utf-8
 '''
-cluster -- finds biosynthetic clusters linked by orthologs in multiple genomes
+cluster -- find biosynthetic clusters linked by orthologs in multiple genomes.
 
-cluster is a tool which processes MultiParanoid/QuickParanoid output for
+First, cluster processes all input genbank files to associate genome sequence
+with ID, species and strain information. If, during the analysis, a duplicate ID
+is found, warning is issued and a numeric dot-suffix (e.g. ".1") is appended to
+the ID. If all components are identical (ID, species, strain, and genome
+length/contig count), then an exception is raised.
+For each input file, nucleotide sequence is extracted as a [multi-]fasta file,
+and annotated using antismash (--cpus 1, but up to as many parallel instances as
+there are cores, likely using queues). This step ensures that there are no
+differences in the methods of gene finding. Antismash annotation, depending on
+the options, will or will not extend identified clusters. Translations of
+antismash-annotated CDS are then extracted to a protein multi-fasta file.
+At the end of the 1st stage, program maintains a relation between genome
+attributes (ID, etc) and 2 files: antismash-generated genbank, and .faa.
+
+Second, when all the input files have been processed as described, an all-vs-all
+pblast is performed between all possible genome pairs, and also each genome is
+pblasted against itself. InParanoid is applied to all pairs of genomes to find
+orthologs.
+
+Third, multiparanoid or quickparanoid is applied to generate a single table of
+orthologous groups.
+
+Finally, cluster processes MultiParanoid/QuickParanoid output for
 multiple genomes, together with the GenBank files of those genomes, and
 calculates "links" between biosynthetic clusters in those genomes. A "link"
 between any two clusters exists, if at least one pair of genes in those
-clusters belong to the same cluster of orthologs. Each link also has a weight
+clusters belongs to the same cluster of orthologs. Each link also has a weight
 assigned to it, which tells the fraction of the orthologs between the two clusters.
+
+cluster outputs CSV files with collected information for further analysis.
 '''
 
 
