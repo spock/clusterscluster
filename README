@@ -3,8 +3,9 @@ clusterscluster
 
 Important note
 
-This software initially was not intended for public release, and may contain a few usability inconveniences.
-However, known inconveniences are easy to workaround both during use and by editing the code.
+This software initially was not intended for public release, and may contain
+a few usability inconveniences. However, known inconveniences are easy to
+workaround both during use and by editing the code.
 Code contributions (patches) of all types are welcome.
 
 
@@ -12,7 +13,7 @@ Purpose of the software
 For a relatively detailed example, please see <article URL>
 
 Dependencies
-
+antismash2 (run_antismash in the PATH)
 
 Installation
 
@@ -21,15 +22,19 @@ Intended workflow
 
 
 TODO list
-- make the entire workflow contained: only receive GenBank files and options as input,
-  then run all the necessary preliminary steps (annotate with antismash2, convert to
-  protein multi-fasta, run InParanoid [avoiding multiple self-self BLAST searches],
-  Quick- or Multi-Paranoid), and produce the final result
-- possible optimization: only run InParanoid on the translations of genes inside clusters,
-  not the entire genome (i.e. "clustome vs clustome" instead of "genome vs genome")
-- add mechanisms for discerning highly similar NRPK/PKS clusters, e.g. by the domains
-  composition+order inside the cluster
-- optimize genbank reading: loop over genbanks instead of reading them all into memory
-  (will be important with 20+ genbank files on a 16GB RAM machine)
-- finish the method for identifying "clusters of highly biosynthetic clusters"; these
-  can also be weighted, e.g. as the average weight of all links
+- make the entire workflow contained: only receive GenBank files and options
+  as input, then run all the necessary preliminary steps (annotate with
+  antismash2, convert to protein multi-fasta, run InParanoid [avoiding
+  multiple self-self BLAST searches], Quick- or Multi-Paranoid), and
+  produce the final result
+- possible optimization: only run InParanoid on the translations of genes
+  inside clusters, not the entire genome (i.e. "clustome vs clustome"
+  instead of "genome vs genome")
+- add mechanisms for discerning highly similar NRPK/PKS clusters,
+  e.g. by the domains composition + order inside the cluster
+- optimize genbank reading: loop over genbanks instead of reading them
+  all into memory (will be important with 20+ genbank files on a
+  16GB RAM machine)
+- finish the method for identifying "clusters of highly biosynthetic
+  clusters"; these can also be weighted, e.g. as the average weight
+  of all links
