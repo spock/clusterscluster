@@ -1,0 +1,61 @@
+From eb324a10520ddc6bb692792dcc5c125f9be3ac37 Mon Sep 17 00:00:00 2001
+From: Bogdan <to.bogdan@gmail.com>
+Date: Thu, 13 Mar 2014 10:45:16 +0100
+Subject: [PATCH] added support for --no-extensions option
+
+---
+ antismash/generic_modules/hmm_detection/__init__.py | 9 ++++++---
+ run_antismash.py                                    | 3 +++
+ 2 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/antismash/generic_modules/hmm_detection/__init__.py b/antismash/generic_modules/hmm_detection/__init__.py
+index 024a27d..8c1e6d0 100644
+--- a/antismash/generic_modules/hmm_detection/__init__.py
++++ b/antismash/generic_modules/hmm_detection/__init__.py
+@@ -211,7 +211,7 @@ def filter_results(results, results_by_id):
+                             del results_by_id[cds][results_by_id[cds].index(res)]
+     return results, results_by_id
+ 
+-def create_rules_dict(enabled_clustertypes):
++def create_rules_dict(enabled_clustertypes, no_extensions):
+     "Create a cluster rules dictionary from the cluster rules file"
+     rulesdict = {}
+     first = True
+@@ -228,7 +228,10 @@ def create_rules_dict(enabled_clustertypes):
+             continue
+         rules = parts.pop(0)
+         cutoff = int(parts.pop(0)) * 1000
+-        extension = int(parts.pop(0)) * 1000
++        if no_extensions:
++            extension = 0
++        else:
++            extension = int(parts.pop(0)) * 1000
+         rulesdict[key] = (rules, cutoff, extension)
+     return rulesdict
+ 
+@@ -337,7 +340,7 @@ def detect_signature_genes(seq_record, enabled_clustertypes, options):
+     logging.info('Detecting gene clusters using HMM library')
+     feature_by_id = utils.get_feature_dict(seq_record)
+     full_fasta = utils.get_multifasta(seq_record)
+-    rulesdict = create_rules_dict(enabled_clustertypes)
++    rulesdict = create_rules_dict(enabled_clustertypes, options.no_extensions)
+     results = []
+     sig_by_name = {}
+     results_by_id = {}
+diff --git a/run_antismash.py b/run_antismash.py
+index 188e153..c3417dd 100755
+--- a/run_antismash.py
++++ b/run_antismash.py
+@@ -136,6 +136,9 @@ def main():
+     group.add_argument('--to', dest='end',
+                         type=int, default=-1,
+                         help="End analysis at nucleotide specified")
++    group.add_argument('--no-extensions', dest='no_extensions',
++                        action='store_true', default=False,
++                        help="Do not extend clusters using cluster_rules.txt (expert use only!)")
+ 
+     group = parser.add_argument_group('Output options')
+     for plugin in output_plugins:
+-- 
+1.9.0
+
