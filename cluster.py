@@ -42,16 +42,21 @@ import logging
 import itertools
 from pprint import pprint
 
+from os import mkdir, rename, remove
+from shutil import rmtree
+from os.path import exists, join, splitext
 from argparse import ArgumentParser
 from Bio import SeqIO
-from Bio.Alphabet import generic_dna
+from Bio.Alphabet import generic_dna#, generic_protein
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 
-import MultiParanoid as MP
-# FIXME: extension trimming will be implemented by modifying antismash2
+from lib import MultiParanoid as MP
+from lib import gb2fasta
+from lib import utils
+# TODO: extension trimming will be implemented by modifying antismash2
 # configuration, obsoleting this import.
-import hmm_detection
+from lib import hmm_detection
 
 
 __all__ = []
@@ -743,6 +748,7 @@ def main():
     parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to debug [default: %(default)s]")
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
+    # TODO: rephrase, possibly remove --no-trim.
     parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
@@ -751,6 +757,9 @@ def main():
     parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names tree_conflict problems [default: %(default)s]")
     parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] tree_conflict problems [default: %(default)s]")
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
+    parser.add_argument("--project", default='cluster_project', help="put all the project files into this directory [default: %(default)s]")
+    parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
+    parser.add_argument('--no-extensions', action = 'store_true', default = False, help='pass --no-extensions option to the modified antismash2 (see README for detais) [default: %(default)s]')
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
     # FIXME: species will be read from input genbank files
@@ -759,6 +768,9 @@ def main():
 #    parser.add_argument(dest="paranoid", help="path to the multiparanoid/quickparanoid sqltable file", metavar="sqltable")
     parser.add_argument(dest="paths", help="paths to the GenBank files with genomes to analyze", metavar="path", nargs='+')
     args = parser.parse_args()
+
+    # Remove any possible duplicate input filenames.
+    args.paths = list(set(args.paths))
 
     if args.debug:
         level = logging.DEBUG
@@ -776,39 +788,115 @@ def main():
     print('Used arguments and options:')
     pprint(args)
 
+    if exists(args.project):
+        if args.force:
+            logging.warning('Re-using existing project directory "%s" as requested.' % args.project)
+        else:
+            logging.error('Specified project directory "%s" already exists! Use --force to continue anyway.' % args.project)
+            sys.exit(1)
+    else: # create
+        mkdir(args.project)
+
     # "Catalog" all input files.
     inputs = {} # Map genome ID to other properties.
 
-    for input in args.paths:
-        # TODO: alternative: add --project directory option.
-        if input is in the current directory or there are files in the current directory:
-            print It is highly recommended to start cluster.py in an empty project directory
-            raise Exception('CurrentDirectoryNotEmptyError')
+    for infile in args.paths:
         # TODO: convert this to a worker to run in parallel.
-        gb = SeqIO.parse(input, 'genbank', generic_dna)
-        if not gb.id or gb.id == '':
-            raise Exception('GenomeHasNoIDError')
-        # Check for a duplicate ID.
-        if gb.id in inputs.keys():
+        contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
+        genome_size = 0 # total size of all contigs
+        organism = {} # maps accessions to 'organism' field
+        primary_accession = '' # for the accession of the longest record
+        primary_length = 0 # current primary accession sequence length
+        accessions = [] # other accessions, e.g. plasmids/contigs/etc
+        # Extract key information.
+        for r in SeqIO.parse(infile, 'genbank', generic_dna):
+            # TODO: check r.id - what is the difference with r.name?
+            logging.debug('record name:', r.name)
+            logging.debug('record ID:', r.id)
+            if not r.name or r.name == '':
+                logging.error('Genome %s has no usable ID!' % input)
+                raise Exception('GenomeHasNoNameError')
+            contigs += 1
+            accessions.append(r.name)
+            organism[r.name] = r.annotations['organism']
+            if primary_accession == '':
+                primary_accession = r.name
+                primary_length = len(r.seq)
+            elif len(r.seq) > primary_length:
+                primary_accession = r.name
+                primary_length = len(r.seq)
+            genome_size += len(r.seq)
+        del primary_length, r
+        # Remove primary accession from the list of all accessions.
+        accessions.remove(primary_accession)
+
+        # Check for duplicate ID.
+        if primary_accession in inputs:
             # Check for an exact duplicate.
-            if same ID, same count of LOCUS, same total length, same organism line:
+            if (inputs[primary_accession]['contigs'] == contigs and
+                inputs[primary_accession]['genome_size'] == genome_size and
+                inputs[primary_accession]['species'] == organism[primary_accession]):
+                logging.error('Found identical genomes:', primary_accession,
+                              organism[primary_accession], contigs, genome_size)
                 raise Exception('IdenticalGenomesError')
             else:
-                append '_1', '_2' etc to the ID until it becomes unique
-        inputs[gb.id] = {species=, loci=, length=, oriname='.gb', basename=''}
-        gb2fasta with the basename.fna name; use ID as '>' ID, followed by space, then all important genome metrics
-        if os.path.exists(ID.gb):
-            print warning reusing antismash2 annotation, extension option behavior cannot be guaranteed
+                # Append '_1', '_2' etc to the ID until it becomes unique.
+                for i in range(1, 10):
+                    new_accession = primary_accession + '_' + str(i)
+                    if new_accession in inputs:
+                        continue
+                    else:
+                        primary_accession = new_accession
+                        del new_accession
+
+        inputs[primary_accession] = {}
+        inputs[primary_accession]['contigs'] = contigs
+        inputs[primary_accession]['genome_size'] = genome_size
+        inputs[primary_accession]['oriname'] = infile
+        inputs[primary_accession]['species'] = organism[primary_accession]
+        inputs[primary_accession]['accessions'] = accessions
+
+        # Write FASTA to basename.fna, raise an exception if file exists.
+        fnafile = join(args.project, splitext(infile)[0] + '.fna')
+        gb2fasta(infile, fnafile)
+
+        # Re-use antismash2 annotation if it exists.
+        as2file = join(args.project, primary_accession + '.gbk')
+        if args.force and exists(as2file):
+            logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
+            logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
         else:
-            run_antismash --outdir ID --cpus 1, with or without the --no-extension option (????????)
-            mv ID/*.final.gbk ID.gb, rm -rf 'ID'
-        if os.path.exists(ID.faa):
-            print reusing
+            as2_options = ['run_antismash', '--outputfolder', primary_accession]
+            as2_options.extend(['--cpus', '1', '--full-blast'])
+            # TODO: check if --inclusive and --all-orfs are really necessary
+            as2_options.extend(['--verbose', '--all-orfs', '--inclusive'])
+            as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
+            as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
+            if args.no_extensions:
+                as2_options.append('--no-extensions')
+            as2_options.append(fnafile)
+            logging.info('Running antismash2:', ' '.join(as2_options))
+            out, err, retcode = utils.execute(as2_options)
+            if retcode != 0:
+                logging.debug('antismash2 returned %d: %r while scanning %r' %
+                              (retcode, err, fnafile))
+            rename(join(args.project, primary_accession, fnafile_basename.final.gbk),
+                   join(args.project, primary_accession.gb) )
+            rmtree(join(args.project, primary_accession))
+        inputs[primary_accession]['as2file'] = as2file
+        inputs[primary_accession]['fnafile'] = fnafile
+#        del as2file, fnafile
+
+        faafile = join(args.project, basename .faa)
+        if exists(join(args.project, faafile)):
+            logging.warning('Reusing existing translation file!')
         else:
             extract_translations from ID.gb to ID.faa
 
-    # When all the workers have finished: make sure they exit, using a keyword
-    del gb, input
+    # When all the workers have finished: make sure they exit, using a keyword.
+    # TODO: move this up into the loop, immediately after assignments to 'input'?
+    del input, contigs, genome_size, organism, primary_accession, accessions
+
 
     generate all possible genome pairs
     create directories for pairs like inparanoid would

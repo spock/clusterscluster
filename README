@@ -34,6 +34,7 @@ Intended workflow
 
 TODO list
 =========
+- avoid symlinking to lib/gb2fasta.py; use git submodules instead?
 - make the entire workflow contained: only receive GenBank files and options
   as input, then run all the necessary preliminary steps (annotate with
   antismash2, convert to protein multi-fasta, run InParanoid [avoiding
