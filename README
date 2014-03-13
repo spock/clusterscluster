@@ -12,11 +12,22 @@ For a relatively detailed example, please see <article URL>
 
 Dependencies
 ============
-antismash2 (run_antismash in the PATH)
+antismash2 (*modified*, see below)
 InParanoid
 
 Installation
 ============
+Modifying antismash2
+--------------------
+cluster needs a version of antismash which can avoid extending clusters using
+the rules in cluster_rules.txt. As of this writing, the --no-extensions was not
+yet available in the antismash2 repository. Here's how you can add this option:
+- install antismash2 from git to a location you can write to, add run_antismash
+  to PATH;
+- apply the supplied 0001-added-support-for-no-extensions-option.patch using
+  `git am` to add support for the --no-extensions option (patch was made against
+  commit 04532e8aa05ff1039acba5bd11613e929c409eca)
+- resolve any possible conflicts while patching.
 
 Intended workflow
 
