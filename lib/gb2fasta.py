@@ -1,0 +1,1 @@
+../../bioinformatics-scripts/gb2fasta.py
