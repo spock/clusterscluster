@@ -743,6 +743,7 @@ def preprocess_input_files(inputs, args):
     '''
     for infile in args.paths:
         # TODO: convert this to a worker to run in parallel.
+        # TODO: switch everywhere from r.name to r.id as more specific (extract_translation also uses r.id).
         contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
         genome_size = 0 # total size of all contigs
         organism = {} # maps accessions to 'organism' field
@@ -917,112 +918,6 @@ def main():
     # "Catalog" all input files.
     inputs = {} # Map genome ID to other properties.
     preprocess_input_files(inputs, args)
-
-    for infile in args.paths:
-        # TODO: move out to a module/function.
-        # TODO: convert this to a worker to run in parallel.
-        contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
-        genome_size = 0 # total size of all contigs
-        organism = {} # maps accessions to 'organism' field
-        primary_accession = '' # for the accession of the longest record
-        primary_length = 0 # current primary accession sequence length
-        accessions = [] # other accessions, e.g. plasmids/contigs/etc
-        # Extract key information.
-        for r in SeqIO.parse(infile, 'genbank', generic_dna):
-            # TODO: check r.id - what is the difference with r.name?
-            logging.debug('record name:', r.name)
-            logging.debug('record ID:', r.id)
-            if not r.name or r.name == '':
-                logging.error('Genome %s has no usable ID!' % input)
-                raise Exception('GenomeHasNoNameError')
-            contigs += 1
-            accessions.append(r.name)
-            organism[r.name] = r.annotations['organism']
-            if primary_accession == '':
-                primary_accession = r.name
-                primary_length = len(r.seq)
-            elif len(r.seq) > primary_length:
-                primary_accession = r.name
-                primary_length = len(r.seq)
-            genome_size += len(r.seq)
-        del primary_length, r
-        # Remove primary accession from the list of all accessions.
-        accessions.remove(primary_accession)
-
-        # Check for duplicate ID.
-        if primary_accession in inputs:
-            # Check for an exact duplicate.
-            if (inputs[primary_accession]['contigs'] == contigs and
-                inputs[primary_accession]['genome_size'] == genome_size and
-                inputs[primary_accession]['species'] == organism[primary_accession]):
-                logging.error('Found identical genomes:', primary_accession,
-                              organism[primary_accession], contigs, genome_size)
-                raise Exception('IdenticalGenomesError')
-            else:
-                # Append '_1', '_2' etc to the ID until it becomes unique.
-                for i in range(1, 10):
-                    new_accession = primary_accession + '_' + str(i)
-                    if new_accession in inputs:
-                        continue
-                    else:
-                        primary_accession = new_accession
-                        del new_accession
-
-        inputs[primary_accession] = {}
-        inputs[primary_accession]['contigs'] = contigs
-        inputs[primary_accession]['genome_size'] = genome_size
-        inputs[primary_accession]['oriname'] = infile
-        inputs[primary_accession]['species'] = organism[primary_accession]
-        inputs[primary_accession]['accessions'] = accessions
-
-        # Write FASTA to basename.fna, raise an exception if file exists.
-        fnafile = join(args.project, splitext(infile)[0] + '.fna')
-        gb2fasta(infile, fnafile)
-
-        # Re-use antismash2 annotation if it exists.
-        as2file = join(args.project, primary_accession + '.gbk')
-        antismash2_reused = False
-        if args.force and exists(as2file):
-            logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
-            logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
-            antismash2_reused = True
-        else:
-            as2_options = ['run_antismash', '--outputfolder', primary_accession]
-            as2_options.extend(['--cpus', '1', '--full-blast'])
-            # FIXME: check if --inclusive and --all-orfs are really necessary
-            as2_options.extend(['--verbose', '--all-orfs', '--inclusive'])
-            as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
-            as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
-            if args.no_extensions:
-                as2_options.append('--no-extensions')
-            as2_options.append(fnafile)
-            logging.info('Running antismash2:', ' '.join(as2_options))
-            out, err, retcode = utils.execute(as2_options)
-            if retcode != 0:
-                logging.debug('antismash2 returned %d: %r while scanning %r' %
-                              (retcode, err, fnafile))
-            # antismash's algorithm for naming the output file:
-            # basename = seq_records[0].id
-            # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
-            rename(join(args.project, primary_accession,
-                        primary_accession + '.final.gbk'),
-                   as2file )
-            rmtree(join(args.project, primary_accession))
-#        inputs[primary_accession]['as2file'] = as2file
-#        inputs[primary_accession]['fnafile'] = fnafile
-#        del as2file, fnafile
-
-        faafile = join(args.project, splitext(infile)[0] + '.faa')
-        if antismash2_reused and args.force and exists(faafile):
-            logging.warning('Reusing existing translations file!')
-        else:
-            extract_translation_from_genbank(as2file, faafile, False)
-#        inputs[primary_accession]['faafile'] = faafile
-#        del faafile
-
-    # When all the workers have finished: make sure they exit, using a keyword.
-    # TODO: move this up into the loop, immediately after assignments to 'input'?
-    del input, contigs, genome_size, organism, primary_accession, accessions
 
 
 #    generate all possible genome pairs
