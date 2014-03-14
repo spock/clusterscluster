@@ -743,7 +743,6 @@ def preprocess_input_files(inputs, args):
     '''
     for infile in args.paths:
         # TODO: convert this to a worker to run in parallel.
-        # TODO: switch everywhere from r.name to r.id as more specific (extract_translation also uses r.id).
         contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
         genome_size = 0 # total size of all contigs
         organism = {} # maps accessions to 'organism' field
@@ -756,16 +755,16 @@ def preprocess_input_files(inputs, args):
         for r in SeqIO.parse(infile, 'genbank', generic_dna):
             # r.name is an accession (e.g. AF080235),
             # r.id is a versioned accession (e.g. AF080235.1)
-            logging.debug('record name: %s', r.name)
-            logging.debug('record ID: %s', r.id)
-            if not r.name or r.name == '':
+            # We use r.id as more specific.
+            logging.debug('record name and ID are %s and %s', r.name, r.id)
+            if not r.id or r.id == '':
                 logging.error('Genome %s has no usable ID!' % input)
                 raise Exception('GenomeHasNoNameError')
             contigs += 1
             accessions.append(r.name)
             ids.append(r.id)
             organism[r.name] = r.annotations['organism']
-            if primary_accession == '':
+            if primary_id == '':
                 primary_accession = r.name
                 primary_id = r.id
                 primary_length = len(r.seq)
@@ -780,46 +779,49 @@ def preprocess_input_files(inputs, args):
         ids.remove(primary_id)
 
         # Check for duplicate ID.
-        if primary_accession in inputs:
+        if primary_id in inputs:
             # Check for an exact duplicate.
-            if (inputs[primary_accession]['contigs'] == contigs and
-                inputs[primary_accession]['genome_size'] == genome_size and
-                inputs[primary_accession]['species'] == organism[primary_accession]):
-                logging.error('Found identical genomes:', primary_accession,
-                              organism[primary_accession], contigs, genome_size)
+            if (inputs[primary_id]['contigs'] == contigs and
+                inputs[primary_id]['genome_size'] == genome_size and
+                inputs[primary_id]['species'] == organism[primary_accession]):
+                logging.error('Found identical genomes of "%s" with ID %s, %s bp long (in %s fragments).',
+                              organism[primary_accession], primary_id, genome_size, contigs)
                 raise Exception('IdenticalGenomesError')
             else:
                 logging.debug('Append _1, _2 etc to the ID until it becomes unique.')
                 for i in range(1, 10):
-                    new_accession = primary_accession + '_' + str(i)
-                    if new_accession in inputs:
+                    new_id = primary_id + '_' + str(i)
+                    if new_id in inputs:
                         continue
                     else:
-                        primary_accession = new_accession
-                        del new_accession
+                        primary_id = new_id
+                        del new_id
 
-        inputs[primary_accession] = {}
-        inputs[primary_accession]['contigs'] = contigs
-        inputs[primary_accession]['genome_size'] = genome_size
-        inputs[primary_accession]['oriname'] = infile
-        inputs[primary_accession]['species'] = organism[primary_accession]
-        inputs[primary_accession]['accessions'] = accessions
+        # TODO: comment out or remove unneeded fields when the program is finished.
+        inputs[primary_id] = {}
+        inputs[primary_id]['contigs'] = contigs
+        inputs[primary_id]['genome_size'] = genome_size
+        inputs[primary_id]['infile'] = infile
+        inputs[primary_id]['species'] = organism[primary_accession]
+        inputs[primary_id]['accessions'] = accessions
+        inputs[primary_id]['ids'] = ids
 
-        # Write FASTA to basename.fna, raise an exception if file exists.
-        fnafile = join(args.project, splitext(infile)[0] + '.fna')
-        inputs[primary_accession]['fnafile'] = fnafile
+        # Write FASTA to ID.fna, raise an exception if file exists.
+        fnafile = join(args.project, primary_id + '.fna')
+        inputs[primary_id]['fnafile'] = fnafile
         gb2fasta(infile, fnafile)
 
         # Re-use antismash2 annotation if it exists.
-        as2file = join(args.project, primary_accession + '.gbk')
-        inputs[primary_accession]['as2file'] = as2file
+        as2file = join(args.project, primary_id + '.gbk')
+        inputs[primary_id]['as2file'] = as2file
         antismash2_reused = False
         if args.force and exists(as2file):
             logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
             logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
+            # Re-using any further files is only possible if we do re-use antismash files.
             antismash2_reused = True
         else:
-            output_folder = join(args.project, primary_accession)
+            output_folder = join(args.project, primary_id)
             as2_options = ['run_antismash', '--outputfolder', output_folder]
             as2_options.extend(['--cpus', '1', '--full-blast'])
             # FIXME: check if --inclusive and --all-orfs are really necessary
@@ -842,10 +844,10 @@ def preprocess_input_files(inputs, args):
             antismash2_file = join(output_folder, primary_id + '.final.gbk')
             logging.debug('antismash2 file (source): %s', antismash2_file)
             rename(antismash2_file, as2file )
-            rmtree(join(args.project, primary_accession))
+            rmtree(output_folder)
 
-        faafile = join(args.project, splitext(infile)[0] + '.faa')
-        inputs[primary_accession]['faafile'] = faafile
+        faafile = join(args.project, primary_id + '.faa')
+        inputs[primary_id]['faafile'] = faafile
         if antismash2_reused and args.force and exists(faafile):
             logging.warning('Reusing existing translations file!')
         else:
