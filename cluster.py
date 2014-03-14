@@ -42,7 +42,7 @@ import logging
 import itertools
 from pprint import pprint
 
-from os import mkdir, rename, remove
+from os import mkdir, rename#, remove
 from shutil import rmtree
 from os.path import exists, join, splitext
 from argparse import ArgumentParser
@@ -54,6 +54,7 @@ from multiprocessing import Process, Queue, cpu_count
 from lib import MultiParanoid as MP
 from lib import gb2fasta
 from lib import utils
+from lib import extract_translation_from_genbank
 # TODO: extension trimming will be implemented by modifying antismash2
 # configuration, obsoleting this import.
 from lib import hmm_detection
@@ -62,7 +63,7 @@ from lib import hmm_detection
 __all__ = []
 __version__ = 0.4
 __date__ = '2013-07-10'
-__updated__ = '2014-03-12'
+__updated__ = '2014-03-14'
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -121,10 +122,8 @@ def bin_key(weight):
     return 1.0
 
 
-def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = True,
-            skipp = False, strict = False, no_tree_problems = False, sizes = False,
-            no_name_problems = False, scale = False):
-    '''Main method which does all the work.
+def process(args):
+    '''Main method which does all the work. 'args' contains:
     "species" is the path to the file containing all strains in the analysis.
     "paranoid" is the path to multi/quick-paranoid output file.
     "paths" is a list of paths to genbank files we want to compare.
@@ -137,10 +136,10 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     "skipp" means "skip putative clusters", if set.
     "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
     "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
-    "sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
+    "use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
     "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
 
-    mp = MP.MultiParanoid(paranoid, no_tree_problems, no_name_problems)
+    mp = MP.MultiParanoid(args.paranoid, args.no_tree_problems, args.no_name_problems)
 
     # Declare important variables.
     # List of recognized species.
@@ -215,7 +214,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         links2 = float(min(calculate_links(c2, c1), c2_genes))
         logging.debug('\tlinks1 = %s and links2 = %s for %s and %s (%s and %s genes)',
                       links1, links2, c1, c2, c1_genes, c2_genes)
-        if strict:
+        if args.strict:
             # No link can be larger than the number of genes in the 2nd cluster.
             if links1 > c2_genes:
                 links1 = float(c2_genes)
@@ -246,7 +245,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
         size1 = float(clustersizes[c1])
         size2 = float(clustersizes[c2])
-        if sizes:
+        if args.use_sizes:
             # Use relative physical cluster sizes as link contribution weight.
             total_size = float(size1 + size2)
             weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
@@ -257,7 +256,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         else:
             both = float(c1_genes + c2_genes)
             weight = links1/both + links2/both
-        if scale:
+        if args.scale:
             weight2 = weight * min(size1, size2) / max(size1, size2)
             logging.debug('\tscaled weight %s to %s', round(weight, 2), round(weight2, 2))
         try:
@@ -267,7 +266,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
                               links1, links2, c1_genes, c2_genes)
             raise
-        if weight >= threshold:
+        if weight >= args.threshold:
             if c1[0] == c2[0]:
                 intra_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
             else:
@@ -299,7 +298,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
 
     # Detect which species it is by the first 5 characters.
     # FIXME: needs a better solution.
-    for gb in paths:
+    for gb in args.paths:
         for s in species:
             if s[0:5] == gb[0:5]:
                 logging.info('\t%s corresponds to species %s', gb, s)
@@ -307,7 +306,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         task_queue.put((s, gb))
     for i in range(cpu_count()):
         Process(target=worker, args=(task_queue, done_queue)).start()
-    for i in range(len(paths)):
+    for i in range(len(args.paths)):
         s, rec = done_queue.get()
         genbank[s] = rec
         locus2species[genbank[s].name] = s
@@ -319,7 +318,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
     print('Parsing clusters and assigning genes to them:')
     logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
     rulesdict = hmm_detection.create_rules_dict()
-    if trim:
+    if args.trim:
         logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
     for s in species:
         logging.debug('\tprocessing %s', s)
@@ -334,12 +333,12 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
                 cluster_number = parse_cluster_number(f.qualifiers['note'])
                 start = int(f.location.start.position)
                 end = int(f.location.end.position)
-                if skipp and f.qualifiers['product'][0] == 'putative':
+                if args.skipp and f.qualifiers['product'][0] == 'putative':
                     logging.debug('\tskipping putative cluster #%s at (%s, %s)',
                                   cluster_number, start, end)
                     continue
                 # Putative clusters have neither extensions nor rules for them.
-                if trim and f.qualifiers['product'][0] != 'putative':
+                if args.trim and f.qualifiers['product'][0] != 'putative':
                     # Use cluster type to get extension size, including composite types.
                     extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
                     # If cluster is at the genome edge - skip extension trimming.
@@ -427,7 +426,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         weight = calculate_weight(c1, c2)
         logging.debug('\tassigned weight %s to %s and %s', round(weight, 2), c1, c2)
         weight_bins[bin_key(weight)] += 1
-        if weight >= threshold:
+        if weight >= args.threshold:
             if c1 not in cluster_weights:
                 cluster_weights[c1] = {}
             if c2 not in cluster_weights:
@@ -543,7 +542,7 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
         for i in range(len(species), 0, -1):
             if len(by_count[i]) == 0:
                 continue
-            fname = prefix + '_' + str(i) + '_links.csv'
+            fname = args.prefix + '_' + str(i) + '_links.csv'
             print('Groups of size', i, '(%s)' % len(by_count[i]),
                   'will be written to file', fname)
             # From here on output goes to both stdout and the file.
@@ -617,13 +616,13 @@ def process(species, paranoid, paths, threshold = 0.0, prefix = 'out_', trim = T
             # species are used.
 
 
-    print('All pairs of clusters with link weight over %s (inter-species).', threshold)
+    print('All pairs of clusters with link weight over %s (inter-species).', args.threshold)
 #        pprint(inter_one)
     print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
     for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in inter_one:
         print('%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s,\t%s\n' %
               (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w), end='')
-    print('All pairs of clusters with link weight over %s (intra-species).' % threshold)
+    print('All pairs of clusters with link weight over %s (intra-species).' % args.threshold)
 #        pprint(intra_one)
     print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
     for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in intra_one:
@@ -749,7 +748,7 @@ def main():
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     # TODO: rephrase, possibly remove --no-trim.
-    parser.add_argument("--no-trim", dest="no_trim", action="store_true", default=False, help="do not trim away antismash2 cluster extensions [default: %(default)s]")
+    parser.add_argument("--trim", dest="trim", action="store_false", default=True, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--scale", dest="scale", action="store_true", default=False, help="scale link weight down by a factor of min(size1, size2)/max(size1, size2) [default: %(default)s]")
@@ -808,7 +807,7 @@ def main():
         primary_accession = '' # for the accession of the longest record
         primary_length = 0 # current primary accession sequence length
         accessions = [] # other accessions, e.g. plasmids/contigs/etc
-        # Extract key information.
+        # Extract key information. TODO: move out to a module/function.
         for r in SeqIO.parse(infile, 'genbank', generic_dna):
             # TODO: check r.id - what is the difference with r.name?
             logging.debug('record name:', r.name)
@@ -862,13 +861,15 @@ def main():
 
         # Re-use antismash2 annotation if it exists.
         as2file = join(args.project, primary_accession + '.gbk')
+        antismash2_reused = False
         if args.force and exists(as2file):
             logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
             logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
+            antismash2_reused = True
         else:
             as2_options = ['run_antismash', '--outputfolder', primary_accession]
             as2_options.extend(['--cpus', '1', '--full-blast'])
-            # TODO: check if --inclusive and --all-orfs are really necessary
+            # FIXME: check if --inclusive and --all-orfs are really necessary
             as2_options.extend(['--verbose', '--all-orfs', '--inclusive'])
             as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
             as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
@@ -880,39 +881,41 @@ def main():
             if retcode != 0:
                 logging.debug('antismash2 returned %d: %r while scanning %r' %
                               (retcode, err, fnafile))
-            rename(join(args.project, primary_accession, fnafile_basename.final.gbk),
-                   join(args.project, primary_accession.gb) )
+            # antismash's algorithm for naming the output file:
+            # basename = seq_records[0].id
+            # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
+            rename(join(args.project, primary_accession,
+                        primary_accession + '.final.gbk'),
+                   as2file )
             rmtree(join(args.project, primary_accession))
-        inputs[primary_accession]['as2file'] = as2file
-        inputs[primary_accession]['fnafile'] = fnafile
+#        inputs[primary_accession]['as2file'] = as2file
+#        inputs[primary_accession]['fnafile'] = fnafile
 #        del as2file, fnafile
 
-        faafile = join(args.project, basename .faa)
-        if exists(join(args.project, faafile)):
-            logging.warning('Reusing existing translation file!')
+        faafile = join(args.project, splitext(infile)[0] + '.faa')
+        if antismash2_reused and args.force and exists(faafile):
+            logging.warning('Reusing existing translations file!')
         else:
-            extract_translations from ID.gb to ID.faa
+            extract_translation_from_genbank(as2file, faafile, False)
+#        inputs[primary_accession]['faafile'] = faafile
+#        del faafile
 
     # When all the workers have finished: make sure they exit, using a keyword.
     # TODO: move this up into the loop, immediately after assignments to 'input'?
     del input, contigs, genome_size, organism, primary_accession, accessions
 
 
-    generate all possible genome pairs
-    create directories for pairs like inparanoid would
-    pblast each genome against itself once (sequentially, pblast can use all CPUs), put the file in the current directory
-    for each pair_directory, cd into it an symlink to 2 self-self pblast results from the upper dir
-    pblast all genome pairs (sequentially, pblast can use all CPUs), storing results into pair-directories like inparanoid would
+#    generate all possible genome pairs
+#    create directories for pairs like inparanoid would
+#    pblast each genome against itself once (sequentially, pblast can use all CPUs), put the file in the current directory
+#    for each pair_directory, cd into it an symlink to 2 self-self pblast results from the upper dir
+#    pblast all genome pairs (sequentially, pblast can use all CPUs), storing results into pair-directories like inparanoid would
+#
+#    run inparanoid on all possible genome.faa pairs, skipping blast (we did it already); make sure it reuses blast results
+#
+#    run multi/quick-paranoid, put the resulting single table into the curdir
 
-    run inparanoid on all possible genome.faa pairs, skipping blast (we did it already); make sure it reuses blast results
-
-    run multi/quick-paranoid, put the resulting single table into the curdir
-
-    # TODO: just pass 'args' around and avoid globals and long lists of arguments?
-    process(prefix=args.prefix, species=args.species, paranoid=args.paranoid,
-            paths=args.paths, threshold=args.threshold, trim= not args.no_trim,
-            skipp=args.skipp, strict=args.strict, no_tree_problems=args.no_tree_problems,
-            sizes=args.use_sizes, no_name_problems=args.no_name_problems, scale=args.scale)
+    process(args)
     return 0
 
 
