@@ -52,9 +52,9 @@ from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 
 from lib import MultiParanoid as MP
-from lib import gb2fasta
+from lib.gb2fasta import gb2fasta
 from lib import utils
-from lib import extract_translation_from_genbank
+from lib.extract_translation_from_genbank import extract_translation_from_genbank
 # TODO: extension trimming will be implemented by modifying antismash2
 # configuration, obsoleting this import.
 from lib import hmm_detection
@@ -736,6 +736,124 @@ def process(args):
         bar = bar.ljust(height)
         print('%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s))
 
+def preprocess_input_files(inputs, args):
+    '''
+    inputs: dictionary to populate
+    args.paths: list of genbank files to process
+    '''
+    for infile in args.paths:
+        # TODO: convert this to a worker to run in parallel.
+        contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
+        genome_size = 0 # total size of all contigs
+        organism = {} # maps accessions to 'organism' field
+        primary_accession = '' # for the accession of the longest record
+        primary_id = '' # as above
+        primary_length = 0 # current primary accession sequence length
+        accessions = [] # other accessions, e.g. plasmids/contigs/etc
+        ids = [] # as above
+        # Extract key information.
+        for r in SeqIO.parse(infile, 'genbank', generic_dna):
+            # r.name is an accession (e.g. AF080235),
+            # r.id is a versioned accession (e.g. AF080235.1)
+            logging.debug('record name: %s', r.name)
+            logging.debug('record ID: %s', r.id)
+            if not r.name or r.name == '':
+                logging.error('Genome %s has no usable ID!' % input)
+                raise Exception('GenomeHasNoNameError')
+            contigs += 1
+            accessions.append(r.name)
+            ids.append(r.id)
+            organism[r.name] = r.annotations['organism']
+            if primary_accession == '':
+                primary_accession = r.name
+                primary_id = r.id
+                primary_length = len(r.seq)
+            elif len(r.seq) > primary_length:
+                primary_accession = r.name
+                primary_id = r.id
+                primary_length = len(r.seq)
+            genome_size += len(r.seq)
+        del primary_length, r
+        # Remove primary accession from the list of all accessions.
+        accessions.remove(primary_accession)
+        ids.remove(primary_id)
+
+        # Check for duplicate ID.
+        if primary_accession in inputs:
+            # Check for an exact duplicate.
+            if (inputs[primary_accession]['contigs'] == contigs and
+                inputs[primary_accession]['genome_size'] == genome_size and
+                inputs[primary_accession]['species'] == organism[primary_accession]):
+                logging.error('Found identical genomes:', primary_accession,
+                              organism[primary_accession], contigs, genome_size)
+                raise Exception('IdenticalGenomesError')
+            else:
+                logging.debug('Append _1, _2 etc to the ID until it becomes unique.')
+                for i in range(1, 10):
+                    new_accession = primary_accession + '_' + str(i)
+                    if new_accession in inputs:
+                        continue
+                    else:
+                        primary_accession = new_accession
+                        del new_accession
+
+        inputs[primary_accession] = {}
+        inputs[primary_accession]['contigs'] = contigs
+        inputs[primary_accession]['genome_size'] = genome_size
+        inputs[primary_accession]['oriname'] = infile
+        inputs[primary_accession]['species'] = organism[primary_accession]
+        inputs[primary_accession]['accessions'] = accessions
+
+        # Write FASTA to basename.fna, raise an exception if file exists.
+        fnafile = join(args.project, splitext(infile)[0] + '.fna')
+        inputs[primary_accession]['fnafile'] = fnafile
+        gb2fasta(infile, fnafile)
+
+        # Re-use antismash2 annotation if it exists.
+        as2file = join(args.project, primary_accession + '.gbk')
+        inputs[primary_accession]['as2file'] = as2file
+        antismash2_reused = False
+        if args.force and exists(as2file):
+            logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
+            logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
+            antismash2_reused = True
+        else:
+            output_folder = join(args.project, primary_accession)
+            as2_options = ['run_antismash', '--outputfolder', output_folder]
+            as2_options.extend(['--cpus', '1', '--full-blast'])
+            # FIXME: check if --inclusive and --all-orfs are really necessary
+            as2_options.extend(['--verbose', '--all-orfs', '--inclusive'])
+            as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
+            as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
+            if args.no_extensions:
+                as2_options.append('--no-extensions')
+            as2_options.append(fnafile)
+            logging.info('Running antismash2: %s', ' '.join(as2_options))
+            # TODO: show output from child processes?...
+            out, err, retcode = utils.execute(as2_options)
+            if retcode != 0:
+                logging.debug('antismash2 returned %d: %r while scanning %r',
+                              retcode, err, fnafile)
+            # antismash's algorithm for naming the output file:
+            # basename = seq_records[0].id
+            # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
+            logging.debug('as2file (target): %s', as2file)
+            antismash2_file = join(output_folder, primary_id + '.final.gbk')
+            logging.debug('antismash2 file (source): %s', antismash2_file)
+            rename(antismash2_file, as2file )
+            rmtree(join(args.project, primary_accession))
+
+        faafile = join(args.project, splitext(infile)[0] + '.faa')
+        inputs[primary_accession]['faafile'] = faafile
+        if antismash2_reused and args.force and exists(faafile):
+            logging.warning('Reusing existing translations file!')
+        else:
+            extract_translation_from_genbank(as2file, faafile, False)
+        del as2file, fnafile, faafile, infile, output_folder
+        del contigs, genome_size, organism, primary_accession, accessions
+        del ids, primary_id
+    # When all the workers have finished: make sure they exit, using a keyword.
+
 
 def main():
     '''Command line options.'''
@@ -747,7 +865,7 @@ def main():
     parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to debug [default: %(default)s]")
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    # TODO: rephrase, possibly remove --no-trim.
+    # FIXME: --trim is broken (on by default, impossible to turn off).
     parser.add_argument("--trim", dest="trim", action="store_false", default=True, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
@@ -798,8 +916,10 @@ def main():
 
     # "Catalog" all input files.
     inputs = {} # Map genome ID to other properties.
+    preprocess_input_files(inputs, args)
 
     for infile in args.paths:
+        # TODO: move out to a module/function.
         # TODO: convert this to a worker to run in parallel.
         contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
         genome_size = 0 # total size of all contigs
@@ -807,7 +927,7 @@ def main():
         primary_accession = '' # for the accession of the longest record
         primary_length = 0 # current primary accession sequence length
         accessions = [] # other accessions, e.g. plasmids/contigs/etc
-        # Extract key information. TODO: move out to a module/function.
+        # Extract key information.
         for r in SeqIO.parse(infile, 'genbank', generic_dna):
             # TODO: check r.id - what is the difference with r.name?
             logging.debug('record name:', r.name)
