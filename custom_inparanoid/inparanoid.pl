@@ -134,6 +134,20 @@ if ((!$run_blast) and (!$run_inparanoid)){
     exit 1;
 }
 
+# Check if output files already exist, and exit if they do.
+$outputfile = "Output." . $ARGV[0] . "-" . $ARGV[1];
+$htmlfile = "orthologs." . $ARGV[0] . "-" . $ARGV[1] . ".html";
+$filename = "table." . $ARGV[0] . "-" . $ARGV[1];
+$filename2 = "sqltable." . $ARGV[0] . "-" . $ARGV[1];
+if (-e $outputfile && -e $htmlfile && -e $filename && -e $filename2) {
+    print "All 4 expected output files exist, skipping the entire analysis:\n";
+    print "\t$outputfile\n";
+    print "\t$htmlfile\n";
+    print "\t$filename\n";
+    print "\t$filename2\n";
+    die;
+}
+
 # Input files:
 $fasta_seq_fileA = "$ARGV[0]";
 $fasta_seq_fileB = "$ARGV[1]";
@@ -180,10 +194,8 @@ my @confA;      # Confidence values for orthologous groups
 my @confB;      # Confidence values for orthologous groups 
 my $prev_time = 0;
 
-$outputfile = "Output." . $ARGV[0] . "-" . $ARGV[1];
 if ($output){
-    # Edited: append to $outputfile instead of overwriting.
-    open OUTPUT, ">>$outputfile" or warn "Could not write to OUTPUT file $filename\n";
+    open OUTPUT, ">$outputfile" or warn "Could not write to OUTPUT file $filename\n";
 }
 
 #################################################
@@ -595,8 +607,6 @@ if ($run_inparanoid) {
 
    # Add the information to the new arrays in the orer specifeid by the index array
    for (my $index_in_list = 0; $index_in_list < scalar @score_id_sorted_position_list; $index_in_list++) {
-	
-
 	my $old_index = $score_id_sorted_position_list[$index_in_list];
 	$new_ortoA[$index_in_list + 1] = $ortoA[$old_index];
 	$new_ortoB[$index_in_list + 1] = $ortoB[$old_index];
@@ -613,15 +623,15 @@ if ($run_inparanoid) {
 #	    $tempA =  $ortoA[$i];
 #	    $tempB =  $ortoB[$i];
 #	    $tempS =  $ortoS[$i];
-#	    
+#
 #	    $ortoA[$i] = $ortoA[$i+1];
 #	    $ortoB[$i] = $ortoB[$i+1];
 #	    $ortoS[$i] = $ortoS[$i+1];
-#	    
+#
 #	    $ortoA[$i+1] = $tempA;
 #	    $ortoB[$i+1] = $tempB;
 #	    $ortoS[$i+1] = $tempS;
-#	    
+#
 #	    --$i if ($i > 1);
 #	}
 #    }
@@ -633,15 +643,15 @@ if ($run_inparanoid) {
 #	    $tempA =  $ortoA[$i];
 #	    $tempB =  $ortoB[$i];
 #	    $tempS =  $ortoS[$i];
-#	    
+#
 #	    $ortoA[$i] = $ortoA[$i+1];
 #	    $ortoB[$i] = $ortoB[$i+1];
 #	    $ortoS[$i] = $ortoS[$i+1];
-#	    
+#
 #	    $ortoA[$i+1] = $tempA;
 #	    $ortoB[$i+1] = $tempB;
 #	    $ortoS[$i+1] = $tempS;
-#	    
+#
 #	    --$i if ($i > 1);
 #	}
 #    }
@@ -658,7 +668,7 @@ if ($run_inparanoid) {
     undef $is_ortologB;
     grep (vec($is_ortologA,$_,1) = 1, @all_ortologsA);
     grep (vec($is_ortologB,$_,1) = 1, @all_ortologsB);
-    
+
     if ($show_times){
 	($user_time,,,) = times;
 	printf ("Finding and sorting orthologs took %.2f seconds\n", ($user_time - $prev_time));
@@ -722,7 +732,7 @@ if ($run_inparanoid) {
 	    $idM = $idC{$m};
 	    $score = $Fld[2];
 	    next unless (vec($is_ortologB,$idQ,1));
-	    
+
 	    next if (!overlap_test(@Fld));
 
 	    next if ($score < $score_cutoff);
@@ -905,7 +915,7 @@ if ($run_inparanoid) {
 	    }
 	    # Overlap type 5:
 	    # All clusters that were overlapping, but not catched by previous "if" statements will be DIVIDED!
-	} 
+	}
 	next if ($merge[$i] < 0); # This cluster should be deleted
 ##### Check for paralogs in A
 	$N = $hitnAA[$idA];
@@ -939,21 +949,21 @@ if ($run_inparanoid) {
 			if($debug == 2){
 			    print "      $nameA[$hitID] is already in cluster $k, together with:";
 			    print " $nameA[$ortoA[$k]] and $nameB[$ortoB[$k]] ";
-			    print "($scoreAA{\"$ortoA[$k]:$hitID\"})";         
+			    print "($scoreAA{\"$ortoA[$k]:$hitID\"})";
 			}
 			if (($confPA[$hitID] >= $conf_here) and 
 			    ($j != 1)){ # The seed ortholog CAN NOT remain there
 			    print " and remains there.\n" if ($debug == 2);
 			    $paralogs = 0; # No action
 			}
-			else { # Ortholog of THIS cluster is closer than ortholog of competing cluster $k 
+			else { # Ortholog of THIS cluster is closer than ortholog of competing cluster $k
 			    print " and should be moved here!\n" if ($debug == 2); # Remove from other cluster, add to this cluster
 			    @membersAK = split(/ /, $paralogsA[$k]); # This array contains IDs
 			    $paralogsA[$k] = "";# Remove all paralogs from cluster $k
 				@tmp = ();
-			    for $m(@membersAK){   
-				push(@tmp,$m) if ($m != $hitID); # Put other members back  
-			    }  
+			    for $m(@membersAK){
+				push(@tmp,$m) if ($m != $hitID); # Put other members back
+			    }
 			    $paralogsA[$k] = join(' ',@tmp);
 			    undef $is_paralogA[$k]; # Create index that we can check later
 			    grep (vec($is_paralogA[$k],$_,1) = 1, @tmp);
@@ -963,7 +973,7 @@ if ($run_inparanoid) {
 		}
 		next if (! $paralogs); # Skip that paralog - it is already in cluster $k
 		push (@membersA,$hitID); # Add this hit to paralogs of A 
-	    } 
+	    }
 	}
 	# Calculate confidence values now:
 	@tmp = ();
@@ -972,11 +982,11 @@ if ($run_inparanoid) {
 		if ($scoreAA{"$idA:$idP"} == $scoreAA{"$idA:$idA"}){
 		    $confPA[$idP] = 1.00;
 		}
-		else{ 
+		else{
 		    $confPA[$idP] = 0.00;
 		}
 	    }
-	    else{ 
+	    else{
 		$confPA[$idP] = ($scoreAA{"$idA:$idP"} - $ortoS[$i]) / 
 		    ($scoreAA{"$idA:$idA"} - $ortoS[$i]);
 	    }
@@ -985,7 +995,7 @@ if ($run_inparanoid) {
 	@membersA = @tmp;
 	########### Merge if necessary:
 	if ($merge[$i] > 0){ # Merge existing cluster with overlapping cluster
-	    @tmp = split(/ /,$paralogsA[$merge[$i]]);      
+	    @tmp = split(/ /,$paralogsA[$merge[$i]]);
 	    for $m (@membersA){
 		push (@tmp, $m)  unless (vec($is_paralogA[$merge[$i]],$m,1));
 	    }
@@ -998,8 +1008,8 @@ if ($run_inparanoid) {
 	    $paralogsA[$i] = join(' ',@membersA);
 	    undef $is_paralogA; # Create index that we can check later
 	    grep (vec($is_paralogA[$i],$_,1) = 1, @membersA);
-	}  
-##### The same procedure for species B:   
+	}
+##### The same procedure for species B:
 	$N = $hitnBB[$idB];
 	for $j(1..$N){
 	    $hitID = $hitBB[$idB][$j];
@@ -1011,7 +1021,7 @@ if ($run_inparanoid) {
 		    printf ("%-20s: %-20s", $nameB[$idB], $nameB[$hitID]);
 		    print "\t$scoreBB{\"$idB:$hitID\"} : ";
 		    print "$bestscoreBA[$idB] : $bestscoreBA[$hitID]\n";
-		}         
+		}
 		$paralogs = 1;
 		if ($scoreBB{"$idB:$idB"} == $ortoS[$i]){
 		    if ($scoreBB{"$idB:$hitID"} == $scoreBB{"$idB:$idB"}){
@@ -1039,14 +1049,14 @@ if ($run_inparanoid) {
 			    print " and remains there.\n" if ($debug == 2);
 			    $paralogs = 0; # No action
 			}
-			else { # Ortholog of THIS cluster is closer than ortholog of competing cluster $k 
+			else { # Ortholog of THIS cluster is closer than ortholog of competing cluster $k
 			    print " and should be moved here!\n" if ($debug == 2); # Remove from other cluster, add to this cluster
 			    @membersBK = split(/ /, $paralogsB[$k]); # This array contains names, not IDs
 			    $paralogsB[$k] = "";
 			    @tmp = ();
-			    for $m(@membersBK){   
-				push(@tmp,$m) if ($m != $hitID); # Put other members back  
-			    }  
+			    for $m(@membersBK){
+				push(@tmp,$m) if ($m != $hitID); # Put other members back
+			    }
 			    $paralogsB[$k] = join(' ',@tmp);
 			    undef $is_paralogB[$k]; # Create index that we can check later
 			    grep (vec($is_paralogB[$k],$_,1) = 1, @tmp);
@@ -1068,17 +1078,17 @@ if ($run_inparanoid) {
 		else{
 		    $confPB[$idP] = 0.0;
 		}
-	    }   
+	    }
 	    else{
 		$confPB[$idP] = ($scoreBB{"$idB:$idP"} - $ortoS[$i]) / 
 		    ($scoreBB{"$idB:$idB"} - $ortoS[$i]);
 	    }
 	    push (@tmp, $idP) if ($confPB[$idP] >= $conf_cutoff); # If one wishes to use only significant paralogs
-	}   
+	}
 	@membersB = @tmp;
 	########### Merge if necessary:
 	if ($merge[$i] > 0){ # Merge existing cluster with overlapping cluster
-	    @tmp = split(/ /,$paralogsB[$merge[$i]]);      
+	    @tmp = split(/ /,$paralogsB[$merge[$i]]);
 	    for $m (@membersB){
 		push (@tmp, $m)  unless (vec($is_paralogB[$merge[$i]],$m,1));
 	    }
@@ -1139,7 +1149,7 @@ if ($run_inparanoid) {
 	}
 	if ($na and ($nb == 0)){
 	    print "Warning: empty B cluster $i\n";
-	    for $m (@membersA){	  
+	    for $m (@membersA){
 		$bestscore = 0;
 		$bestgroup = 0;
 		$bestmatch = 0;
@@ -1171,11 +1181,9 @@ if ($run_inparanoid) {
 
     &clean_up(1);
 ###################
-    $htmlfile = "orthologs." . $ARGV[0] . "-" . $ARGV[1] . ".html";
     if ($html){
-	open HTML, ">$htmlfile" or warn "Could not write to HTML file $filename\n";
+	open HTML, ">$htmlfile" or warn "Could not write to HTML file $htmlfile\n";
     }
-
 
     if ($output){
 	print OUTPUT "\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\#\n";
@@ -1212,7 +1220,7 @@ if ($run_inparanoid) {
     }
     for $i(1..$o){
 	@membersA = split(/ /, $paralogsA[$i]);
-	@membersB = split(/ /, $paralogsB[$i]);		 
+	@membersB = split(/ /, $paralogsB[$i]);
 	$message = "";
 	$htmlmessage = "";
 	
@@ -1265,19 +1273,19 @@ if ($run_inparanoid) {
 	    $message .= sprintf("\n");
 	    if ($html){
 		if ($bsA[$idA] < 0.75){
-		    $htmlmessage .= sprintf("<font color=\"red\">"); 			
+		    $htmlmessage .= sprintf("<font color=\"red\">");
 		}
 		elsif ($bsA[$idA] < 0.95){
 		    $htmlmessage .= sprintf("<font color=\"\#FFCC00\">");
-		}  
+		}
 		else {
 		    $htmlmessage .= sprintf("<font color=\"green\">");
-		}  
+		}
 		$htmlmessage .= sprintf("Bootstrap support for %s as seed ortholog is %d%%.\n", $nameA[$idA], 100*$bsA[$idA]);
 		$htmlmessage .= sprintf("Alternative seed ortholog is %s (%d bits away from this cluster)\n", $nameA[$idH], $confA[$i]) if ($bsA[$idA] < 0.75);
 		$htmlmessage .= sprintf("</font>");
-	    } 
-	    printf (FF "%s\t%d\t%d\n", $nameA[$idA], $confA[$i], 100*$bsA[$idA]) if ($use_bootstrap and $debug); 
+	    }
+	    printf (FF "%s\t%d\t%d\n", $nameA[$idA], $confA[$i], 100*$bsA[$idA]) if ($use_bootstrap and $debug);
 	}
 	########
 	$idA = $ortoA[$i];
@@ -1287,7 +1295,7 @@ if ($run_inparanoid) {
 	    $nB = $hitnBA[$idB];
 	    $confB[$i] = $ortoS[$i]; # default
 	    $bsB[$idB] = 1.0;
-	    
+
 	    for $j(1..$nA){ # For all AB hits of given ortholog
 		$idH = $hitAB[$idA][$j];
 		# ############### Some checks for alternative orthologs:
@@ -1330,7 +1338,7 @@ if ($run_inparanoid) {
 	    if ($html){
 		if ($bsB[$idB] < 0.75){
 		    $htmlmessage .= sprintf("<font color=\"red\">");
-		}      
+		}
 		elsif ($bsB[$idB] < 0.95){
 		    $htmlmessage .= sprintf("<font color=\"\#FFCC00\">");
 		}
@@ -1342,13 +1350,13 @@ if ($run_inparanoid) {
 		$htmlmessage .= sprintf("</font>");
 	    }
 	    printf (FF "%s\t%d\t%d\n", $nameB[$idB], $confB[$i], 100*$bsB[$idB]) if ($use_bootstrap and $debug);
-	}		
+	}
 	close FF;
 	########### Print header ###############
 	if ($output){
 	    print OUTPUT "___________________________________________________________________________________\n";
 	    print OUTPUT "Group of orthologs #" . $i .". Best score $ortoS[$i] bits\n";
-		print OUTPUT "Score difference with first non-orthologous sequence - ";
+	    print OUTPUT "Score difference with first non-orthologous sequence - ";
 	    printf (OUTPUT "%s:%d   %s:%d\n", $fasta_seq_fileA,$confA[$i],$fasta_seq_fileB,$confB[$i]);
 	}
 	
@@ -1357,8 +1365,8 @@ if ($run_inparanoid) {
 	    print HTML "<hr WIDTH=\"100%\">";
 	    print HTML "<h3>";
 	    print HTML "Group of orthologs #" . $i .". Best score $ortoS[$i] bits<br>\n";
-		print HTML "Score difference with first non-orthologous sequence - ";
-	    printf (HTML "%s:%d   %s:%d</h3><pre>\n", $fasta_seq_fileA,$confA[$i],$fasta_seq_fileB,$confB[$i]);			
+	    print HTML "Score difference with first non-orthologous sequence - ";
+	    printf (HTML "%s:%d   %s:%d</h3><pre>\n", $fasta_seq_fileA,$confA[$i],$fasta_seq_fileB,$confB[$i]);
 	}
 	########### Sort and print members of A ############
 	$nA = @membersA;
@@ -1382,7 +1390,7 @@ if ($run_inparanoid) {
 		$membersB[$m+1] = $temp;
 		--$m if ($m > 1);
 	    }
-	}   
+	}
 	$paralogsB[$i] = join(' ',@membersB); # Put them back together
 	# Print to text file and to HTML file
 	for $m (0..($nMAX-1)){
@@ -1427,9 +1435,8 @@ if ($run_inparanoid) {
       close HTML;
       print "HTML output saved to $htmlfile\n";
     }
-    
+
     if ($table){
-	$filename = "table." . $ARGV[0] . "-" . $ARGV[1];
 	open F, ">$filename" or die;
 	print F "OrtoID\tScore\tOrtoA\tOrtoB\n";
 	for $i(1..$o){
@@ -1446,12 +1453,11 @@ if ($run_inparanoid) {
 		printf (F "%s %.3f ", $nameB[$m], $confPB[$m]);
 	    }
 	    print F "\n";
-	}  
+	}
 	close F;
 	print "Table output saved to $filename\n";
     }
-    if ($mysql_table){
-	$filename2 = "sqltable." . $ARGV[0] . "-" . $ARGV[1];
+    if ($mysql_table) {
 	open F2, ">$filename2" or die;
 	for $i(1..$o){
 	    @membersA = split(/ /, $paralogsA[$i]);
@@ -1462,7 +1468,7 @@ if ($run_inparanoid) {
 		} else {
 		    printf (F2 "%d\t%d\t%s\t%.3f\t%s\n", $i, $ortoS[$i], $ARGV[0], $confPA[$m], $nameA[$m]);
 		}
-	    }     
+	    }
 	    @membersB = split(/ /, $paralogsB[$i]);
 	    for $m (@membersB){
 		# $m =~ s/://g;
