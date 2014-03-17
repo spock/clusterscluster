@@ -55,8 +55,18 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
                    # (by more than $outgroup_cutoff bits)                     #
 
 # Define location of files and programs:
-#$blastall = "blastall -VT"; #Remove -VT for blast version 2.2.12 or earlier
-$blastall = "blastall -a 8";  #Add -aN to use N processors
+# Edited: detect the number of CPUs/cores (will probably work only in bash).
+my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`
+# Proper method:
+#use Sys::Info;
+#use Sys::Info::Constants qw( :device_cpu );
+#my $info = Sys::Info->new;
+#my $cpu  = $info->device( CPU => %options );
+#printf "CPU: %s\n", scalar($cpu->identify)  || 'N/A';
+#printf "CPU speed is %s MHz\n", $cpu->speed || 'N/A';
+#printf "There are %d CPUs\n"  , $cpu->count || 1;
+#printf "CPU load: %s\n"       , $cpu->load  || 0;
+$blastall = "blastall -a $num_cpus";  #Add -aN to use N processors; add -V, -VT to emulate older BLAST.
 $formatdb = "formatdb";
 $seqstat = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/seqstat.jar";
 $blastParser = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/blast_parser.pl";
