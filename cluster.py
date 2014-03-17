@@ -42,14 +42,15 @@ import logging
 import itertools
 from pprint import pprint
 
-from os import mkdir, rename#, remove
+from os import mkdir, rename#, symlink#, remove
+from os.path import exists, join#, splitext
 from shutil import rmtree
-from os.path import exists, join, splitext
 from argparse import ArgumentParser
 from Bio import SeqIO
 from Bio.Alphabet import generic_dna#, generic_protein
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
+from itertools import product
 
 from lib import MultiParanoid as MP
 from lib.gb2fasta import gb2fasta
@@ -741,6 +742,9 @@ def preprocess_input_files(inputs, args):
     inputs: dictionary to populate
     args.paths: list of genbank files to process
     '''
+    # FIXME: split into 2 parts:
+    # - linear processing of genbank IDs
+    # - parallel translation and antismashing
     for infile in args.paths:
         # TODO: convert this to a worker to run in parallel.
         contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
@@ -921,18 +925,40 @@ def main():
     inputs = {} # Map genome ID to other properties.
     preprocess_input_files(inputs, args)
 
+    # TODO: put everything inparanoid-related into a subdir?
+#    inparanoidir = join(args.project, 'inparanoid')
+#    # Symlink all faa files there
+#    for _ in inputs.iterkeys():
+#        # TODO: can parallelize.
+#        symlink(inputs[_]['faafile'], inparanoidir)
+    # Collect all faafile names into a list.
+    faafiles = []
+    for _ in inputs.itervalues():
+        faafiles.append(_['faafile'])
+    # TODO: prepend custom_inparanoid path to PATH, so that it is used first.
+    # TODO: check if output sqltable files exist prior to starting inparanoid;
+    #       may want to skip inparanoid if they exist.
+    # Generate all possible genome pairs; allow self-pairs and different-order pairs.
+#    for pair in product(faafiles, repeat = 2):
+#        # carve out 2-pass blast from inparanoid and re-use it here?..
+#        # or extend inparanoid a little bit, and call it here first for blasting, then for analysis?
+#        bitscore_cutoff = 40
+#        filename_separator = '-'
+#        formatdb -i file1
+#        formatdb -i file2
+#        BLOSUM45
+#        # 1-pass
+#        blastall -a cpu_count -F"m S" -i query1 -d database2 -p blastp -v database_size4 -b database_size4 -M BLOSUM45 -z 5000000 -m7 | blastparser score_cutoff > output5
+#        # 2-pass
+#        # first
+#        blastall -a cpu_count -C3 -F"m S" -i query -d database -p blastp -v ... -b ... -M ... -z ... -m7 | parser cutoff | FHR
+#        # second: somehow process FHR results, formatdb them, run blastall -C0 -FF with FHR as query
 
-#    generate all possible genome pairs
-#    create directories for pairs like inparanoid would
-#    pblast each genome against itself once (sequentially, pblast can use all CPUs), put the file in the current directory
-#    for each pair_directory, cd into it an symlink to 2 self-self pblast results from the upper dir
-#    pblast all genome pairs (sequentially, pblast can use all CPUs), storing results into pair-directories like inparanoid would
-#
+
 #    run inparanoid on all possible genome.faa pairs, skipping blast (we did it already); make sure it reuses blast results
-#
 #    run multi/quick-paranoid, put the resulting single table into the curdir
 
-    process(args)
+#    process(args)
     return 0
 
 
