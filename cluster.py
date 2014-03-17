@@ -42,8 +42,8 @@ import logging
 import itertools
 from pprint import pprint
 
-from os import mkdir, rename#, symlink#, remove
-from os.path import exists, join#, splitext
+from os import mkdir, rename, environ, getcwd#, symlink#, remove
+from os.path import exists, join, dirname, realpath#, splitext
 from shutil import rmtree
 from argparse import ArgumentParser
 from Bio import SeqIO
@@ -935,9 +935,15 @@ def main():
     faafiles = []
     for _ in inputs.itervalues():
         faafiles.append(_['faafile'])
-    # TODO: prepend custom_inparanoid path to PATH, so that it is used first.
+    # Prepend custom_inparanoid path to PATH, so that it is used first.
+    # alternative path finding method: dirname(sys.argv[0])
+    environ = ':'.join(join(dirname(realpath(__file__)), 'custom_inparanoid'), environ)
     # TODO: check if output sqltable files exist prior to starting inparanoid;
     #       may want to skip inparanoid if they exist.
+    # TODO: inparanoid with only 1 input file will blast it against itself.
+    #       Thus, it makes sense to first feed faafiles to inparanoid as single arguments,
+    #       and then use permutations(faafiles, 2) to feed 2 args to inparanoid with --blast-only.
+    #       Finally, feed permutations(faafiles, 2) to inparanoid for analysis, in parallel.
     # Generate all possible genome pairs; allow self-pairs and different-order pairs.
 #    for pair in product(faafiles, repeat = 2):
 #        # carve out 2-pass blast from inparanoid and re-use it here?..
