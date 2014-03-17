@@ -41,7 +41,7 @@ my $usage =" Usage: inparanoid.pl <FASTAFILE with sequences of species A> <FASTA
 ###############################################################################
 
 # What do you want the program to do?                                         #
-$run_blast = 0;  # Set to 1 if you don't have the 4 BLAST output files        #
+$run_blast = 1;  # Set to 1 if you don't have the 4 BLAST output files        #
                  # Requires 'blastall', 'formatdb' (NCBI BLAST2)              #
                  # and parser 'blast_parser.pl'                               #
 $blast_two_passes = 1;  # Set to 1 to run 2-pass strategy                     #
@@ -58,13 +58,13 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
 #$blastall = "blastall -VT"; #Remove -VT for blast version 2.2.12 or earlier
 $blastall = "blastall -a 8";  #Add -aN to use N processors
 $formatdb = "formatdb";
-$seqstat = "/home/bogdan/data/software/inparanoid_4.1/seqstat.jar";
-$blastParser = "/home/bogdan/data/software/inparanoid_4.1/blast_parser.pl";
+$seqstat = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/seqstat.jar";
+$blastParser = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/blast_parser.pl";
 
 #$matrix = "BLOSUM62"; # Reasonable default for comparison of eukaryotes.
 $matrix = "BLOSUM45"; #(for prokaryotes),
 # For seqstat.jar, which requires the file and not simply the name of the matrix.
-$matrix_full = "/home/bogdan/data/software/inparanoid_4.1/BLOSUM45";
+$matrix_full = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/BLOSUM45";
 #$matrix = "BLOSUM80"; #(orthologs within metazoa),
 #$matrix = "PAM70";
 #$matrix = "PAM30";
@@ -118,10 +118,10 @@ if ((!$run_blast) and (!$run_inparanoid)){
     exit 1;
 }
 
-# Input files:                                                            
-$fasta_seq_fileA = "$ARGV[0]";                                            
-$fasta_seq_fileB = "$ARGV[1]";                                            
-$fasta_seq_fileC = "$ARGV[2]" if ($use_outgroup); # This is outgroup file  
+# Input files:
+$fasta_seq_fileA = "$ARGV[0]";
+$fasta_seq_fileB = "$ARGV[1]";
+$fasta_seq_fileC = "$ARGV[2]" if ($use_outgroup); # This is outgroup file.
 
 my $blast_outputAB = $fasta_seq_fileA . "-" . $fasta_seq_fileB;
 my $blast_outputBA = $fasta_seq_fileB . "-" . $fasta_seq_fileA;
@@ -166,7 +166,8 @@ my $prev_time = 0;
 
 $outputfile = "Output." . $ARGV[0] . "-" . $ARGV[1];
 if ($output){
-    open OUTPUT, ">$outputfile" or warn "Could not write to OUTPUT file $filename\n";
+    # Edited: append to $outputfile instead of overwriting.
+    open OUTPUT, ">>$outputfile" or warn "Could not write to OUTPUT file $filename\n";
 }
 
 #################################################
@@ -181,8 +182,7 @@ while (<A>){
 	chomp;
 	s/\>//;
 	@tmp = split(/\s+/);
-	#$name = substr($tmp[0],0,25);
-	$name = $tmp[0];
+	$name = $tmp[0]; #$name = substr($tmp[0],0,25);
 	$idA{$name} = int($id);
 	$nameA[$id] = $name;
     }
@@ -208,8 +208,7 @@ Usage $0 <FASTAFILE with sequences of species A> <FASTAFILE with sequences of sp
 	    chomp;
 	    s/\>//;
 	    @tmp = split(/\s+/);
-	    #$name = substr($tmp[0],0,25);
-	    $name = $tmp[0];
+	    $name = $tmp[0]; #$name = substr($tmp[0],0,25);
 	    $idB{$name} = int($id);
 	    $nameB[$id] = $name;
 	}
@@ -235,8 +234,7 @@ if ($use_outgroup){
 	    chomp;
 	    s/\>//;
 	    @tmp = split(/\s+/);
-	    #$name = substr($tmp[0],0,25);
-	    $name = $tmp[0];
+	    $name = $tmp[0]; #$name = substr($tmp[0],0,25);
 	    $idC{$name} = int($id);
 	    $nameC[$id] = $name;
 	}
@@ -257,30 +255,53 @@ if ($show_times){
 #################################################
 # Run BLAST if not done already
 #################################################
-if ($run_blast){
+
+# Edited to only run BLAST if the 4 files do not exist already.
+if ($run_blast && !(-e $blast_outputAA && -e $blast_outputAB && -e $blast_outputBA && -e $blast_outputBB) ) {
     print "Trying to run BLAST now - this may take several hours ... or days in worst case!\n";
     print STDERR "Formatting BLAST databases\n";
     system ("$formatdb -i $fasta_seq_fileA");
     system ("$formatdb -i $fasta_seq_fileB") if (@ARGV >= 2);
-    system ("$formatdb -i $fasta_seq_fileC") if ($use_outgroup);   
+    system ("$formatdb -i $fasta_seq_fileC") if ($use_outgroup);
     print STDERR "Done formatting\nStarting BLAST searches...\n";
 
-# Run blast only if the files do not already exist is not default. 
+# Run blast only if the files do not already exist is not default.
 # NOTE: you should have done this beforehand, because you probably
 # want two-pass blasting anyway which is not implemented here
 # this is also not adapted to use specific compositional adjustment settings
 # and might not use the proper blast parser...
 
-    do_blast ($fasta_seq_fileA, $fasta_seq_fileA, $A, $A, $blast_outputAA);
+    # Edited to allow re-using BLAST results.
+    if (-e $blast_outputAA) {
+        print "Re-using BLAST result $blast_outputAA.\n";
+    }
+    else {
+        do_blast ($fasta_seq_fileA, $fasta_seq_fileA, $A, $A, $blast_outputAA);
+    }
 
     if (@ARGV >= 2) {
-      do_blast ($fasta_seq_fileA, $fasta_seq_fileB, $B, $B, $blast_outputAB);
-      do_blast ($fasta_seq_fileB, $fasta_seq_fileA, $A, $A, $blast_outputBA);
-      do_blast ($fasta_seq_fileB, $fasta_seq_fileB, $B, $B, $blast_outputBB);
+        # Edited to allow re-using BLAST results.
+        if (-e $blast_outputAB) {
+            print "Re-using BLAST result $blast_outputAB.\n";
+        }
+        else {
+            do_blast ($fasta_seq_fileA, $fasta_seq_fileB, $B, $B, $blast_outputAB);
+        }
+        if (-e $blast_outputBA) {
+            print "Re-using BLAST result $blast_outputBA.\n";
+        }
+        else {
+            do_blast ($fasta_seq_fileB, $fasta_seq_fileA, $A, $A, $blast_outputBA);
+        }
+        if (-e $blast_outputBB) {
+            print "Re-using BLAST result $blast_outputBB.\n";
+        }
+        else {
+            do_blast ($fasta_seq_fileB, $fasta_seq_fileB, $B, $B, $blast_outputBB);
+        }
     }
 
     if ($use_outgroup){
-
 	do_blast ($fasta_seq_fileA, $fasta_seq_fileC, $A, $C, $blast_outputAC);
 	do_blast ($fasta_seq_fileB, $fasta_seq_fileC, $B, $C, $blast_outputBC);
     }
@@ -292,9 +313,13 @@ if ($run_blast){
     }
     print STDERR "Done BLAST searches. ";
 
-} else {
-	print STDERR "Skipping blast! \n";
 }
+else {
+    print STDERR "Skipping blast!\n";
+}
+
+#################################################
+
 
 if ($run_inparanoid){
     print STDERR "Starting ortholog detection...\n";
