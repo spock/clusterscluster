@@ -16,7 +16,7 @@
 # NOTE: This script requires blastall (NCBI BLAST) version 2.2.16 or higher, that supports 
 # compositional score matrix adjustment (-C2 flag).
 
-my $usage =" Usage: inparanoid.pl <FASTAFILE with sequences of species A> <FASTAFILE with sequences of species B> [FASTAFILE with sequences of species C]
+my $usage =" Usage: inparanoid.pl [--blast-only] <FASTAFILE with sequences of species A> <FASTAFILE with sequences of species B> [FASTAFILE with sequences of species C]
 
 ";
 
@@ -33,7 +33,7 @@ my $usage =" Usage: inparanoid.pl <FASTAFILE with sequences of species A> <FASTA
 # - Optionally it can use a species C as outgroup.
 
 ###############################################################################
-# You may need to run the following command manually to increase your 
+# You may need to run the following command manually to increase your
 # default datasize limit: 'limit datasize 500000 kb'
 
 ###############################################################################
@@ -87,7 +87,7 @@ $mysql_table = 1; # Print out sql tables for the web server                    #
                   # Each inparalog is on separate line                         #
 $html = 1;        # HTML-format output                                         #
 
-# Algorithm parameters:                                                        
+# Algorithm parameters:
 # Default values should work without problems.
 # MAKE SURE, however, that the score cutoff here matches what you used for BLAST!
 $score_cutoff = 40;    # In bits. Any match below this is ignored             #
@@ -114,6 +114,12 @@ $ENV{CLASSPATH} = "$seqstat" if ($use_bootstrap);
 if (!@ARGV){
     print STDERR $usage;
     exit 1;
+}
+
+if ($ARGV[0] eq '--blast-only') {
+    $run_inparanoid = 0;
+    $run_blast = 1;
+    shift(@ARGV);
 }
 
 if ((@ARGV < 2) and ($run_inparanoid)){
@@ -331,7 +337,7 @@ else {
 #################################################
 
 
-if ($run_inparanoid){
+if ($run_inparanoid) {
     print STDERR "Starting ortholog detection...\n";
 #################################################
 # Read in best hits from blast output file AB
@@ -543,7 +549,7 @@ if ($run_inparanoid){
 # Now find orthologs:
 ######################################################
     $o = 0;
-    
+
     for $i(1..$A){   # For each ID in file A
 	if (defined $besthitAB[$i]){
 	    @besthits = split(/ /,$besthitAB[$i]);
@@ -1162,7 +1168,7 @@ if ($run_inparanoid){
 	    }
 	}
     }
-    
+
     &clean_up(1);
 ###################
     $htmlfile = "orthologs." . $ARGV[0] . "-" . $ARGV[1] . ".html";
@@ -1475,13 +1481,16 @@ if ($run_inparanoid){
       printf ("Finding bootstrap values and printing took %.2f seconds\n", ($user_time - $prev_time));
       printf ("The overall execution time: %.2f seconds\n", $user_time);
     }
-    if ($run_blast) { 
+    if ($run_blast) {
       unlink "formatdb.log";
       unlink "$fasta_seq_fileA.phr", "$fasta_seq_fileA.pin", "$fasta_seq_fileA.psq";
       unlink "$fasta_seq_fileB.phr", "$fasta_seq_fileB.pin", "$fasta_seq_fileB.psq" if (@ARGV >= 2);
-      unlink "$fasta_seq_fileC.phr", "$fasta_seq_fileC.pin", "$fasta_seq_fileC.psq" if ($use_outgroup);   
+      unlink "$fasta_seq_fileC.phr", "$fasta_seq_fileC.pin", "$fasta_seq_fileC.psq" if ($use_outgroup);
     }
-  }
+}
+else {
+    print "NOT performing Inparanoid analysis, as requested.\n";
+}
 
 ##############################################################
 # Functions:
