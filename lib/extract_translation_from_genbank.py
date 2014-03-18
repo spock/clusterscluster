@@ -1,0 +1,1 @@
+../../bioinformatics-scripts/extract_translation_from_genbank.py
