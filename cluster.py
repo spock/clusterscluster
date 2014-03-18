@@ -40,9 +40,10 @@ from __future__ import print_function
 import sys
 import logging
 import itertools
-from pprint import pprint
+import os
 
-from os import mkdir, rename, environ, getcwd#, symlink#, remove
+from pprint import pprint
+from os import mkdir, rename#, environ, getcwd#, symlink#, remove
 from os.path import exists, join, dirname, realpath#, splitext
 from shutil import rmtree
 from argparse import ArgumentParser
@@ -50,7 +51,7 @@ from Bio import SeqIO
 from Bio.Alphabet import generic_dna#, generic_protein
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
-from itertools import product
+from itertools import permutations
 
 from lib import MultiParanoid as MP
 from lib.gb2fasta import gb2fasta
@@ -849,6 +850,7 @@ def preprocess_input_files(inputs, args):
             logging.debug('antismash2 file (source): %s', antismash2_file)
             rename(antismash2_file, as2file )
             rmtree(output_folder)
+            del output_folder
 
         faafile = join(args.project, primary_id + '.faa')
         inputs[primary_id]['faafile'] = faafile
@@ -856,7 +858,7 @@ def preprocess_input_files(inputs, args):
             logging.warning('Reusing existing translations file!')
         else:
             extract_translation_from_genbank(as2file, faafile, False)
-        del as2file, fnafile, faafile, infile, output_folder
+        del as2file, fnafile, faafile, infile
         del contigs, genome_size, organism, primary_accession, accessions
         del ids, primary_id
     # When all the workers have finished: make sure they exit, using a keyword.
@@ -910,7 +912,7 @@ def main():
     height = args.height
 
     print('Used arguments and options:')
-    pprint(args)
+    pprint(vars(args))
 
     if exists(args.project):
         if args.force:
@@ -925,6 +927,7 @@ def main():
     inputs = {} # Map genome ID to other properties.
     preprocess_input_files(inputs, args)
 
+    # FIXME: inparanoid cannot work with file paths, only file names. Need to cd to args.project?
     # TODO: put everything inparanoid-related into a subdir?
 #    inparanoidir = join(args.project, 'inparanoid')
 #    # Symlink all faa files there
@@ -935,33 +938,44 @@ def main():
     faafiles = []
     for _ in inputs.itervalues():
         faafiles.append(_['faafile'])
+    del _
     # Prepend custom_inparanoid path to PATH, so that it is used first.
     # alternative path finding method: dirname(sys.argv[0])
-    environ = ':'.join(join(dirname(realpath(__file__)), 'custom_inparanoid'), environ)
-    # TODO: check if output sqltable files exist prior to starting inparanoid;
-    #       may want to skip inparanoid if they exist.
-    # TODO: inparanoid with only 1 input file will blast it against itself.
-    #       Thus, it makes sense to first feed faafiles to inparanoid as single arguments,
-    #       and then use permutations(faafiles, 2) to feed 2 args to inparanoid with --blast-only.
-    #       Finally, feed permutations(faafiles, 2) to inparanoid for analysis, in parallel.
-    # Generate all possible genome pairs; allow self-pairs and different-order pairs.
-#    for pair in product(faafiles, repeat = 2):
-#        # carve out 2-pass blast from inparanoid and re-use it here?..
-#        # or extend inparanoid a little bit, and call it here first for blasting, then for analysis?
-#        bitscore_cutoff = 40
-#        filename_separator = '-'
-#        formatdb -i file1
-#        formatdb -i file2
-#        BLOSUM45
-#        # 1-pass
-#        blastall -a cpu_count -F"m S" -i query1 -d database2 -p blastp -v database_size4 -b database_size4 -M BLOSUM45 -z 5000000 -m7 | blastparser score_cutoff > output5
-#        # 2-pass
-#        # first
-#        blastall -a cpu_count -C3 -F"m S" -i query -d database -p blastp -v ... -b ... -M ... -z ... -m7 | parser cutoff | FHR
-#        # second: somehow process FHR results, formatdb them, run blastall -C0 -FF with FHR as query
+    custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
+    os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
+    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
+    del custom_inparanoid
 
+    for _ in faafiles:
+        blast_single = ['inparanoid.pl', '--blast-only', _]
+        logging.info('Running blast-only inparanoid on single genomes (BLAST uses all cores): %s',
+                     ' '.join(blast_single))
+        out, err, retcode = utils.execute(blast_single)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while blasting %r',
+                          retcode, err, _)
+    del _, blast_single, out, err, retcode
 
-#    run inparanoid on all possible genome.faa pairs, skipping blast (we did it already); make sure it reuses blast results
+    for pair in permutations(faafiles, 2):
+        blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
+        logging.info('Running blast-only inparanoid on genome pairs (BLAST uses all cores): %s',
+                     ' '.join(blast_pair))
+        out, err, retcode = utils.execute(blast_pair)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while blasting %r and %r',
+                          retcode, err, pair[0], pair[1])
+    del blast_pair, pair, out, err, retcode
+
+    # FIXME: make run in parallel.
+    for pair in permutations(faafiles, 2):
+        inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
+        logging.info('Running inparanoid analysis: %s', ' '.join(inparanoid_pair))
+        out, err, retcode = utils.execute(inparanoid_pair)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
+                          retcode, err, pair[0], pair[1])
+    del inparanoid_pair, pair, out, err, retcode
+
 #    run multi/quick-paranoid, put the resulting single table into the curdir
 
 #    process(args)

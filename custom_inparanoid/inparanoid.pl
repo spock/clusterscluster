@@ -56,7 +56,7 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
 
 # Define location of files and programs:
 # Edited: detect the number of CPUs/cores (will probably work only in bash).
-my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`
+my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`;
 # Proper method:
 #use Sys::Info;
 #use Sys::Info::Constants qw( :device_cpu );
@@ -124,7 +124,6 @@ if ($ARGV[0] eq '--blast-only') {
 
 if ((@ARGV < 2) and ($run_inparanoid)){
     print STDERR "\n When \$run_inparanoid=1, at least two distinct FASTA files have to be specified.\n";
-
     print STDERR $usage;
     exit 1;
 }
