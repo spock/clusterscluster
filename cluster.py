@@ -43,8 +43,8 @@ import itertools
 import os
 
 from pprint import pprint
-from os import mkdir, rename#, environ, getcwd#, symlink#, remove
-from os.path import exists, join, dirname, realpath#, splitext
+from os import mkdir, rename, symlink, getcwd, chdir#, environ, remove
+from os.path import exists, join, dirname, realpath, basename#, splitext
 from shutil import rmtree
 from argparse import ArgumentParser
 from Bio import SeqIO
@@ -829,8 +829,7 @@ def preprocess_input_files(inputs, args):
             output_folder = join(args.project, primary_id)
             as2_options = ['run_antismash', '--outputfolder', output_folder]
             as2_options.extend(['--cpus', '1', '--full-blast'])
-            # FIXME: check if --inclusive and --all-orfs are really necessary
-            as2_options.extend(['--verbose', '--all-orfs', '--inclusive'])
+            as2_options.extend(['--verbose', '--all-orfs'])
             as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
             as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
             if args.no_extensions:
@@ -863,6 +862,74 @@ def preprocess_input_files(inputs, args):
         del ids, primary_id
     # When all the workers have finished: make sure they exit, using a keyword.
 
+def run_inparanoid(inputs, args):
+    # Prepend custom_inparanoid path to PATH, so that it is used first.
+    # alternative path finding method: dirname(sys.argv[0])
+    custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
+    os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
+    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
+    del custom_inparanoid
+
+    # Collect all faafile names into a list without paths.
+    faafiles = []
+    for _ in inputs.itervalues():
+        faafiles.append(basename(_['faafile']))
+    del _
+
+    # Put everything inparanoid-related into a subdir.
+    inparanoidir = join(args.project, 'inparanoid')
+    if not (args.force and exists(inparanoidir)):
+        mkdir(inparanoidir)
+
+    # Symlink all faa files there.
+    for _ in faafiles:
+        # TODO: can parallelize, or join with the code below.
+        linkname = join(inparanoidir, _)
+        if not (args.force and exists(linkname)):
+            symlink(join('..', _), linkname)
+    del linkname, _
+
+    # CD to the inparanoid directory.
+    curr_path = getcwd()
+    chdir(inparanoidir)
+    logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
+
+    for _ in faafiles:
+        blast_single = ['inparanoid.pl', '--blast-only', _]
+        logging.info('Running blast on a single genome: %s',
+                     ' '.join(blast_single))
+        out, err, retcode = utils.execute(blast_single)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while blasting %r',
+                          retcode, err, _)
+    del _, blast_single, out, err, retcode
+
+    for pair in permutations(faafiles, 2):
+        blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
+        logging.info('Running blast on genome pair: %s',
+                     ' '.join(blast_pair))
+        out, err, retcode = utils.execute(blast_pair)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while blasting %r and %r',
+                          retcode, err, pair[0], pair[1])
+    del blast_pair, pair, out, err, retcode
+
+    # FIXME: make run in parallel.
+    # FIXME: this must run on combinations, not permutations!
+    for pair in permutations(faafiles, 2):
+        inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
+        logging.info('Running inparanoid analysis: %s', ' '.join(inparanoid_pair))
+        out, err, retcode = utils.execute(inparanoid_pair)
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
+                          retcode, err, pair[0], pair[1])
+    del inparanoid_pair, pair, out, err, retcode
+
+    # CD back to the initial directory.
+    chdir(curr_path)
+    logging.debug("Changed directory from %s to %s.", inparanoidir, curr_path)
+    del inparanoidir, curr_path
+    del faafiles
 
 def main():
     '''Command line options.'''
@@ -925,56 +992,9 @@ def main():
 
     # "Catalog" all input files.
     inputs = {} # Map genome ID to other properties.
+
     preprocess_input_files(inputs, args)
-
-    # FIXME: inparanoid cannot work with file paths, only file names. Need to cd to args.project?
-    # TODO: put everything inparanoid-related into a subdir?
-#    inparanoidir = join(args.project, 'inparanoid')
-#    # Symlink all faa files there
-#    for _ in inputs.iterkeys():
-#        # TODO: can parallelize.
-#        symlink(inputs[_]['faafile'], inparanoidir)
-    # Collect all faafile names into a list.
-    faafiles = []
-    for _ in inputs.itervalues():
-        faafiles.append(_['faafile'])
-    del _
-    # Prepend custom_inparanoid path to PATH, so that it is used first.
-    # alternative path finding method: dirname(sys.argv[0])
-    custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
-    os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
-    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
-    del custom_inparanoid
-
-    for _ in faafiles:
-        blast_single = ['inparanoid.pl', '--blast-only', _]
-        logging.info('Running blast-only inparanoid on single genomes (BLAST uses all cores): %s',
-                     ' '.join(blast_single))
-        out, err, retcode = utils.execute(blast_single)
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while blasting %r',
-                          retcode, err, _)
-    del _, blast_single, out, err, retcode
-
-    for pair in permutations(faafiles, 2):
-        blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
-        logging.info('Running blast-only inparanoid on genome pairs (BLAST uses all cores): %s',
-                     ' '.join(blast_pair))
-        out, err, retcode = utils.execute(blast_pair)
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while blasting %r and %r',
-                          retcode, err, pair[0], pair[1])
-    del blast_pair, pair, out, err, retcode
-
-    # FIXME: make run in parallel.
-    for pair in permutations(faafiles, 2):
-        inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
-        logging.info('Running inparanoid analysis: %s', ' '.join(inparanoid_pair))
-        out, err, retcode = utils.execute(inparanoid_pair)
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
-                          retcode, err, pair[0], pair[1])
-    del inparanoid_pair, pair, out, err, retcode
+    run_inparanoid(inputs, args)
 
 #    run multi/quick-paranoid, put the resulting single table into the curdir
 

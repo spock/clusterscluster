@@ -147,7 +147,7 @@ if (-e $outputfile && -e $htmlfile && -e $filename && -e $filename2) {
     print "\t$htmlfile\n";
     print "\t$filename\n";
     print "\t$filename2\n";
-    die;
+    exit;
 }
 
 # Input files:
