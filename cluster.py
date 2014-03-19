@@ -965,8 +965,8 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     '''
     configfile = realpath(join(project, 'quickparanoid.config'))
     logging.debug("Generating %s.", configfile)
-    # TODO: possibly add a check for existing configfile and quickparanoid result, and skip this?
-    # (can use args.force and exists() for checking).
+    # TODO: possibly add a check for existing configfile and quickparanoid result,
+    #       and skip this entirely? (can use args.force and exists() for checking).
     logging.debug("(configfile is re-generated even if it exists)")
     with open(configfile, 'w') as conf_handle:
         conf_handle.write("\n".join(faafiles))
@@ -993,7 +993,8 @@ def run_quickparanoid(inparanoidir, faafiles, project):
            join(curr_path, project, project + 's'))
 
     # Delete leftover garbage from quickparanoid.
-    for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h']:
+    for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h',
+              '__ortholog.h']:
         remove(join(quickparanoid, _))
     del _
 
@@ -1004,11 +1005,14 @@ def run_quickparanoid(inparanoidir, faafiles, project):
 
     # Run generated executable to get results file.
     result_name = 'quickparanoid-' + project + '.txt'
-    exe = ['./' + project, '>', result_name]
+    exe = ['./' + project]
     logging.info('Running generated executable: %s', ' '.join(exe))
     out, err, retcode = utils.execute(exe)
     if retcode != 0:
         logging.debug('executable returned %d: %r', retcode, err)
+    else:
+        with open(result_name, 'w') as fh:
+            fh.write(out)
     del out, err, retcode
 
     logging.debug("Returning to %s from %s.", curr_path, project_dir)
