@@ -418,12 +418,12 @@ if ($run_inparanoid) {
 		print STDERR "BA ok\n";
 	    }
 	    next;
-	} 
+	}
 
 	$q = $Fld[0];
 	$m = $Fld[1];
 	$idQ = $idB{$q};
-	$idM = $idA{$m};	 
+	$idM = $idA{$m};
 	$score = $Fld[2];
 	
 	next if (!overlap_test(@Fld));
@@ -551,14 +551,14 @@ if ($run_inparanoid) {
 	undef $is_besthitBA[$idB]; # Create index that we can check later
 	grep (vec($is_besthitBA[$idB],$_,1) = 1, split(/ /,$besthitBA[$idB]));
 #    printf ("besthitBA[%d] = %d\n",$idA,$besthitAB[$idA]);
-    }      
-    
+    }
+
     if ($show_times){
 	($user_time,,,) = times;
 	printf ("Reading and sorting homologs took %.2f seconds\n", ($user_time - $prev_time));
 	$prev_time = $user_time;
     }
-    
+
 ######################################################
 # Now find orthologs:
 ######################################################
@@ -1489,15 +1489,16 @@ if ($run_inparanoid) {
       printf ("Finding bootstrap values and printing took %.2f seconds\n", ($user_time - $prev_time));
       printf ("The overall execution time: %.2f seconds\n", $user_time);
     }
-    if ($run_blast) {
+}
+else {
+    print "NOT performing Inparanoid analysis, as requested.\n";
+}
+
+if ($run_blast) {
       unlink "formatdb.log";
       unlink "$fasta_seq_fileA.phr", "$fasta_seq_fileA.pin", "$fasta_seq_fileA.psq";
       unlink "$fasta_seq_fileB.phr", "$fasta_seq_fileB.pin", "$fasta_seq_fileB.psq" if (@ARGV >= 2);
       unlink "$fasta_seq_fileC.phr", "$fasta_seq_fileC.pin", "$fasta_seq_fileC.psq" if ($use_outgroup);
-    }
-}
-else {
-    print "NOT performing Inparanoid analysis, as requested.\n";
 }
 
 ##############################################################
