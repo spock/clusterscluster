@@ -42,7 +42,7 @@ import logging
 import os
 
 from pprint import pprint
-from os import mkdir, rename, symlink, getcwd, chdir#, environ, remove
+from os import mkdir, rename, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
 from shutil import rmtree
 from argparse import ArgumentParser
@@ -878,7 +878,7 @@ def prepare_inparanoid(inputs, args):
     faafiles.sort()
 
     # Put everything inparanoid-related into a subdir.
-    inparanoidir = join(args.project, 'inparanoid')
+    inparanoidir = realpath(join(args.project, 'inparanoid'))
     if not (args.force and exists(inparanoidir)):
         mkdir(inparanoidir)
 
@@ -950,7 +950,7 @@ def run_inparanoid(inparanoidir, faafiles):
 #    pass
 
 
-def run_quickparanoid(inparanoidir, faafiles, args):
+def run_quickparanoid(inparanoidir, faafiles, project):
     '''
     Requires a config file, which is simply a list of all .faa files, 1 per line.
     quickparanoid MUST BE RUN from quickparanoid dir!
@@ -958,38 +958,63 @@ def run_quickparanoid(inparanoidir, faafiles, args):
     When all is configured, run 'qp inparanoidir configfile_path execfile_prefix'
     to generate EXEC_FILE and EXEC_FILES in the quickparanoid directory.
     Then
-    EXEC_FILE > quickparanoid_result.txt
+    ./EXEC_FILE > quickparanoid_result.txt
     and
-    EXEC_FILEs for some stats
+    ./EXEC_FILEs for some stats
+    Return absolute result_name path.
     '''
-    configfile = join(args.project, 'quickparanoid.config')
-    logging.debug("Generating quickparanoid.config file in %s.", configfile)
+    configfile = realpath(join(project, 'quickparanoid.config'))
+    logging.debug("Generating %s.", configfile)
     # TODO: possibly add a check for existing configfile and quickparanoid result, and skip this?
     # (can use args.force and exists() for checking).
     logging.debug("(configfile is re-generated even if it exists)")
-    with open(configfile) as conf_handle:
+    with open(configfile, 'w') as conf_handle:
         conf_handle.write("\n".join(faafiles))
 
     # Alternative path finding method: dirname(sys.argv[0])
     quickparanoid = join(dirname(realpath(__file__)), 'quickparanoid')
     curr_path = getcwd()
-    logging.debug("Remembering current directory %s, changing to %s.", curr_path, quickparanoid)
+    logging.debug("Remembering current directory %s, changing to %s.",
+                  curr_path, quickparanoid)
     chdir(quickparanoid)
 
-    qp = ['./qp', inparanoidir, configfile, args.project]
-    logging.info('Running inparanoid analysis: %s', ' '.join(qp))
+    # quickparanoid requires a trailing slash.
+    qp = ['./qp', inparanoidir + os.sep, configfile, project]
+    logging.info('Running quickparanoid analysis: %s', ' '.join(qp))
     out, err, retcode = utils.execute(qp)
     if retcode != 0:
         logging.debug('quickparanoid returned %d: %r while analyzing %r in %r',
-                      retcode, err, configfile, args.project)
+                      retcode, err, configfile, project)
     del out, err, retcode
 
-    # move generated args.project and args.projects executables to the args.project directory
-    # run generated executables to obtain the results file, name it quickparanoid-args.project.txt
+    # Move generated 'project' and 'projects' executables to the {project} directory.
+    rename(join(quickparanoid, project), join(curr_path, project, project))
+    rename(join(quickparanoid, project + 's'),
+           join(curr_path, project, project + 's'))
 
-    logging.debug("Returning to %s from %s.", curr_path, quickparanoid)
+    # Delete leftover garbage from quickparanoid.
+    for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h']:
+        remove(join(quickparanoid, _))
+    del _
+
+    # Get back from quickparanoid.
+    project_dir = join(curr_path, project)
+    logging.debug("Going to %s from %s.", project_dir, quickparanoid)
+    chdir(project_dir)
+
+    # Run generated executable to get results file.
+    result_name = 'quickparanoid-' + project + '.txt'
+    exe = ['./' + project, '>', result_name]
+    logging.info('Running generated executable: %s', ' '.join(exe))
+    out, err, retcode = utils.execute(exe)
+    if retcode != 0:
+        logging.debug('executable returned %d: %r', retcode, err)
+    del out, err, retcode
+
+    logging.debug("Returning to %s from %s.", curr_path, project_dir)
     chdir(curr_path)
     del quickparanoid, curr_path
+    return join(project_dir, result_name)
 
 
 def main():
@@ -1058,11 +1083,10 @@ def main():
     inparanoidir, faafiles = prepare_inparanoid(inputs, args)
     run_inparanoid(inparanoidir, faafiles)
 
-    # TODO: run quickparanoid, put the resulting single table into the curdir.
-    run_quickparanoid(inputs, args)
+    result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
     del inparanoidir, faafiles
 
-
+    # Process result_path.
 #    process(args)
     return 0
 
