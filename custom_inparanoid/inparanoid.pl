@@ -120,6 +120,8 @@ if (!@ARGV){
 if ($ARGV[0] eq '--blast-only') {
     $run_inparanoid = 0;
     $run_blast = 1;
+    # Also suppress output when blasting-only.
+    $output = 0;
     shift(@ARGV);
 }
 
