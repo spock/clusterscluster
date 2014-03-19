@@ -1,0 +1,687 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+<title>QuickParanoid - A Tool for Ortholog Clustering</title>
+<meta name="description" content="Programming Languages Laboratory">
+<meta name="keywords" content="Programming Languages Laboratory">
+<link rel="stylesheet" href="QuickParanoid%20-%20A%20Tool%20for%20Ortholog%20Clustering_files/basic.html" type="text/css">
+</head>
+<body alink="#FF0000" bgcolor="#FFFFFF" link="#0000EE" text="#000000" vlink="#551A8B">
+<p>
+
+
+</p><h1>QuickParanoid - A Tool for Ortholog Clustering</h1>
+
+<ul>
+by Taekyung Kim and Sungwoo Park 
+</ul> 
+
+<ul>
+<li> <a href="#intro">Introduction</a> 
+</li><li> <a href="#install">Installation</a>
+</li><li> <a href="#quick">Quick guide to QuickParanoid</a>
+</li><li> <a href="#usage">Usage</a>
+</li><li> <a href="#datasets">Datasets</a> 
+</li><li> <a href="#extension">Extending QuickParanoid</a> 
+</li></ul>
+
+<hr width="100%">
+
+<h3>
+If you are a user of QuickParanoid, please let us know.
+We would like to further improve QuickParanoid
+and are interested in your case studies that use QuickParanoid for ortholog clustering. 
+Please email us at [gla at postech.ac.kr]. 
+Thank you very much!
+</h3> 
+
+<hr width="100%">
+<h3><a name="intro">Introduction</a></h3>
+
+QuickParanoid is a suite of programs for automatic ortholog clustering and analysis.  
+It takes as input a collection of files produced by 
+<a href="http://inparanoid.sbc.su.se/cgi-bin/index.cgi">InParanoid</a> 
+and finds ortholog clusters among multiple species.  
+For a given dataset, QuickParanoid first preprocesses each InParanoid output file
+and then computes ortholog clusters.
+It also provides a couple of programs <tt>qa1</tt> and <tt>qa2</tt> for analyzing the result of ortholog clustering. 
+<p> 
+
+QuickParanoid is similar to <a href="http://www.sbc.su.se/%7Eandale/multiparanoid/html/index.html">MultiParanoid</a> 
+and <a href="http://www.orthomcl.org/">OrthoMCL</a> 
+in functionality, but is much faster.
+For example, it takes only 199.56 seconds on an Intel 2.4Ghz machine with 1 gigabyte memory 
+to process a dataset of 120 species 
+(which contains 14403218 entries in 120 * 119 / 2 = 7140 InParanoid output files of a total size of 365.38 megabytes).  
+In comparison, MultiParanoid on the same machine 
+fails to process a dataset of 20 species 
+(which contains 319368 entries),
+and OrthoMCL fails to process a dataset of 60 species
+(which contains 3245394 entries).
+The accuracy is also comparable with MultiParanoid and OrthoMCL. 
+For example, for a dataset of 3 species, 
+QuickParanoid finds 135 clusters in the manually curated data consisting of 221 clusters 
+while MultiParanoid and OrthoMCL find 137 clusters and 98 clusters, respectively.   
+</p><p>
+
+Here is the result of testing the speed and memory usage of the three programs 
+using eight different datasets. 
+All experiments were performed on an Intel 2.4Ghz machine running Debian Linux 2.6.21-6 with 1 gigabyte memory.
+<!--
+The running time for QuickParanoid includes the time for preprecessing a dataset. 
+(See below for an explanation on preprecessing datasets.) 
+-->
+Memory usage for MultiParanoid and OrthoMCL was measured using <tt>top</tt>.  
+Note that in the experiment with 120 species, 
+QuickParanoid finds a cluster consisting of sequences from all 120 species!
+</p><p>
+<table border="1" cellpadding="1" cellspacing="1">
+<tbody><tr>
+  <td> Number of species  &nbsp;&nbsp; </td>
+  <td> Dataset size &nbsp;&nbsp; </td>
+  <td> Number of entries in the dataset &nbsp;&nbsp; </td>
+  <td> QuickParanoid [<a href="http://pl.postech.ac.kr/QuickParanoid/all-result.txt">summary</a>] &nbsp;&nbsp; 
+    <br>
+     (running time) <br>
+     (memory usage) <br>
+     (number of clusters found) 
+  </td>
+  <td> MultiParanoid &nbsp;&nbsp; 
+    <br>
+     (running time) <br>
+     (memory usage) <br>
+     (number of clusters found) 
+  </td>
+  <td> OrthoMCL &nbsp;&nbsp; 
+    <br>
+     (running time) <br>
+     (memory usage) <br>
+     (number of clusters found) 
+  </td>
+  <td> Number of clusters found by QuickParanoid and MultiParanoid &nbsp;&nbsp; </td>
+  <td> Number of clusters found by QuickParanoid and OrthoMCL &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 5 &nbsp;&nbsp; </td>
+  <td> 0.38 Mbytes &nbsp;&nbsp; </td>
+  <td> 14664&nbsp;&nbsp; </td>
+  <td> 0.15 seconds&nbsp;&nbsp; <br>
+  600 Kbytes &nbsp;&nbsp; <br>
+  2208 clusters &nbsp;&nbsp; </td>
+  <td> 2.03 seconds &nbsp;&nbsp; <br>
+  38 Mbytes &nbsp;&nbsp; <br>
+  2293 clusters &nbsp;&nbsp; </td>
+  <td> 35 seconds &nbsp;&nbsp; <br>
+   31.00 Mbytes &nbsp;&nbsp; <br>
+   2787 clusters &nbsp;&nbsp; </td>
+  <td> 2091 clusters &nbsp;&nbsp; </td>
+  <td> 1372 clusters &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 10 &nbsp;&nbsp; </td>
+  <td> 1.86 Mbytes &nbsp;&nbsp; </td>
+  <td> 71035 &nbsp;&nbsp; </td>
+  <td> 0.51 seconds&nbsp;&nbsp; <br>
+  1584 Kbytes &nbsp;&nbsp; <br>
+  3034 clusters &nbsp;&nbsp; </td>
+  <td> 48.78 seconds&nbsp;&nbsp; <br>
+  140 Mbytes &nbsp;&nbsp; <br>
+  3218 clusters &nbsp;&nbsp; </td>
+  <td> 175 seconds &nbsp;&nbsp; <br>
+  61.75 Mbytes &nbsp;&nbsp; <br>
+  4466 clusters &nbsp;&nbsp; </td>
+  <td> 2737 clusters &nbsp;&nbsp; </td>
+  <td> 1882 clusters &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 15 &nbsp;&nbsp; </td>
+  <td> 4.24 Mbytes &nbsp;&nbsp; </td>
+  <td> 164173 &nbsp;&nbsp; </td>
+  <td> 1.09 seconds&nbsp;&nbsp; <br>
+  3117 Kbytes &nbsp;&nbsp; <br>
+  4242 clusters &nbsp;&nbsp; </td>
+  <td> 5107.86 seconds &nbsp;&nbsp; <br>
+  314 Mbytes &nbsp;&nbsp; <br>
+  4515 clusters &nbsp;&nbsp; </td>
+  <td> 600 seconds &nbsp;&nbsp; <br>
+  112.45 Mbytes &nbsp;&nbsp; <br>
+  6849 clusters &nbsp;&nbsp; </td>
+  <td> 3767 clusters &nbsp;&nbsp; </td>
+  <td> 2751 clusters &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 20 &nbsp;&nbsp; </td>
+  <td> 8.19 Mbytes &nbsp;&nbsp; </td>
+  <td> 319368 &nbsp;&nbsp; </td>
+  <td> 2.75 seconds&nbsp;&nbsp; <br>
+  4764 Kbytes &nbsp;&nbsp; <br>
+  4934 clusters &nbsp;&nbsp; </td>
+  <td> &#8734; &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </td>
+  <td> 1150 seconds&nbsp;&nbsp; <br>
+  186.50 Mbytes &nbsp;&nbsp; <br>
+  8477 clusters &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> 3259 clusters &nbsp;&nbsp; </td>
+</tr>
+<!--
+<TR>
+  <TD> 30 &nbsp;&nbsp; </TD>
+  <TD> 19.37 Mbytes &nbsp;&nbsp; </TD>
+  <TD> 774562 &nbsp;&nbsp; </TD>
+  <TD> 6.07 seconds&nbsp;&nbsp; <br>
+  11602 Kbytes&nbsp;&nbsp; <br>
+  6611 clusters&nbsp;&nbsp; </TD>
+  <TD> &#8734;  &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </TD>
+  <td> - &nbsp;&nbsp; </TD>
+</TR>
+-->
+<tr>
+  <td> 40 &nbsp;&nbsp; </td>
+  <td> 35.14 Mbytes &nbsp;&nbsp; </td>
+  <td> 1407029 &nbsp;&nbsp; </td>
+  <td> 13.10 seconds&nbsp;&nbsp; <br>
+  28655 Kbytes&nbsp;&nbsp; <br>
+  9003 clusters&nbsp;&nbsp; </td>
+  <td> &#8734;  &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </td><td> 13513 seconds&nbsp;&nbsp; <br>
+  722.75 Mbytes&nbsp;&nbsp; <br>
+  18686 clusters&nbsp;&nbsp; </td>
+  
+  <td> - &nbsp;&nbsp; </td>
+  <td> 5539 clusters &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 60 &nbsp;&nbsp; </td>
+  <td> 81.48 Mbytes &nbsp;&nbsp; </td>
+  <td> 3245394 &nbsp;&nbsp; </td>
+  <td> 40.32 seconds&nbsp;&nbsp; <br>
+  94425 Kbytes&nbsp;&nbsp; <br>
+  18830 clusters&nbsp;&nbsp; </td>
+  <td>  &#8734; &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 90 &nbsp;&nbsp; </td>
+  <td> 225.07 Mbytes &nbsp;&nbsp; </td>
+  <td> 8865949 &nbsp;&nbsp; </td>
+  <td> 84.12 seconds&nbsp;&nbsp; <br>
+  245024 Kbytes &nbsp;&nbsp; <br>
+  27199 clusters &nbsp;&nbsp; </td>
+  <td>  &#8734; &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 120 &nbsp;&nbsp; </td>
+  <td> 365.38 Mbytes &nbsp;&nbsp; </td>
+  <td> 14403218 &nbsp;&nbsp; </td>
+  <td> 199.56 seconds  &nbsp;&nbsp; <br>
+  335972 Kbytes &nbsp;&nbsp; <br>
+  29379 clusters &nbsp;&nbsp; </td>
+  <td> &#8734; &nbsp;&nbsp; 
+  <br> - <br>
+  - <br>
+  </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+  <td> - &nbsp;&nbsp; </td>
+</tr>
+</tbody></table>
+
+</p><p> 
+Here is the result of testing the accuracy of the three programs 
+using a dataset of three species (human, fly, worm) 
+for which manually curated data are available.  
+Each entry in the table denotes the number of clusters. 
+</p><p>
+<table border="1" cellpadding="1" cellspacing="1">
+<tbody><tr>
+  <td> Manually curated data (A) &nbsp;&nbsp; </td>
+  <td> QuickParanoid (B) &nbsp;&nbsp; </td>
+  <td> MultiParanoid (C) &nbsp;&nbsp; </td>
+  <td> OrthoMCL (D) &nbsp;&nbsp; </td>
+  <td> A &#8745; B &nbsp;&nbsp; </td>
+  <td> A &#8745; C &nbsp;&nbsp; </td>
+  <td> A &#8745; D &nbsp;&nbsp; </td>
+  <td> A &#8745; B &#8745; C &nbsp;&nbsp; </td>
+  <td> A &#8745; B &#8745; D &nbsp;&nbsp; </td>
+</tr>
+<tr>
+  <td> 221 &nbsp;&nbsp; </td>
+  <td> 5620 &nbsp;&nbsp; </td>
+  <td> 5722 &nbsp;&nbsp; </td>
+  <td> 5635 &nbsp;&nbsp; </td>
+  <td> 135 &nbsp;&nbsp; </td>
+  <td> 137 &nbsp;&nbsp; </td>
+  <td> 98 &nbsp;&nbsp; </td>
+  <td> 135 &nbsp;&nbsp; </td>
+  <td> 92 &nbsp;&nbsp; </td>
+</tr>
+</tbody></table> 
+
+</p><p>
+Among 5620 clusters found by QuickParanoid, 98.52% (5537 clusters) exactly match those found by MultiParanoid.
+The following graph shows the distribution of clusters found by QuickParanoid 
+against their similarity with those found by MultiParanoid (in logarithmic scale). 
+A similarity value <i>p</i> means that <i>p</i> of sequences in a cluster found by QuickParanoid 
+are included in some similar cluster found by MultiParanoid.
+<i>p = 1.0</i> means that exactly the same cluster is found both by QuickParanoind and by MultiParanoid. 
+</p><p> 
+<img src="QuickParanoid%20-%20A%20Tool%20for%20Ortholog%20Clustering_files/mpqp.png" width="587">
+<!-- <img width=587 src="mpqp.png">-->
+
+</p><p>
+</p><hr width="100%">
+<h3><a name="install">Installation</a></h3>
+
+<ul>
+<li> QuickParanoid requires GNU <tt>gcc</tt> and <tt>make</tt> in the Unix environment.  
+We have tested it only on Debian Linux 2.6.21-6 and Cygwin,
+but any programming environment with GNU <tt>gcc</tt> and <tt>make</tt> should be fine. 
+
+<p>
+</p></li><li> Download 
+<a href="http://pl.postech.ac.kr/QuickParanoid/QuickParanoid.tar.gz">QuickParanoid.tar.gz</a>
+or 
+<a href="http://pl.postech.ac.kr/QuickParanoid/QuickParanoid.zip">QuickParanoid.zip</a>, and uncompress it in your installation directory. 
+
+<p>
+</p></li><li> Run <tt>make qa</tt> in the installation directory to see if GNU <tt>gcc</tt> and <tt>make</tt> are available. 
+<pre>[gla@plquad:40 ] make qa
+g++ -o qa1 qa1.cpp
+gcc -c hashtable.c -o hashtable.o
+g++ -o qa2 hashtable.o qa2.cpp
+</pre>
+If successful, you are ready to use QuickParanoid. 
+If not, make sure that both <tt>gcc</tt> and <tt>make</tt> are installed on your system,
+and edit <tt>Makefile</tt> appropriately (two variables <tt>CC</tt> and <tt>CPP</tt> in it). 
+<p>
+
+</p></li><li> <b>If your compiler complains that strcpy() and strcmp() are not declared, import "string.h" in your source code. </b>
+</li></ul>
+
+<p>
+</p><hr width="100%">
+<h3><a name="quick">Quick guide to QuickParanoid</a></h3>
+
+<ul>
+<li> Follow the instruction to install QuickParanoid.
+<p>
+</p></li><li> Download a dataset of three species <a href="http://pl.postech.ac.kr/QuickParanoid/fly-human-worm.tar.gz">fly-human-worm.tar.gz</a> or
+<a href="http://pl.postech.ac.kr/QuickParanoid/fly-human-worm.zip">fly-human-worm.zip</a>
+in the same directory that QuickParanoid is installed, and uncompress it.  
+<p>
+</p></li><li> 
+Run <tt>qp</tt> and follow the instruction: 
+<pre>[gla@plquad:43 ] qp
+=====================================================
+                   QuickParanoid 
+=====================================================
+Dataset directory [default = "." (current directory)]: fly-human-worm
+Data file prefix [default = "sqltable."]: 
+Data file separator [default = "-"]: 
+Configuration file [default = "fly-human-worm/config"]: 
+Executable file prefix [default = "test"]: 
+Generating a header file.....
+Updating Makefile.....
+Generating executable files......
+g++ -o dump dump.cpp
+./dump fly-human-worm/config
+Reading the config file
+Reading the data files
+...
+g++ -o gen_header gen_header.cpp
+./gen_header fly-human-worm/config __ortholog.h 
+Reading the config file
+Reading the data files
+Opening fly-human-worm/sqltable.fly2k-human2k
+Opening fly-human-worm/sqltable.fly2k-worm2k
+Opening fly-human-worm/sqltable.human2k-worm2k
+Generating structure definitions
+Generating functions
+Generating species
+Generating sequences
+gcc  -c ortholog.c -o ortholog.o
+gcc -c hashtable_itr.c -o hashtable_itr.o
+gcc  -o test hashtable.o hashtable_itr.o ortholog.o qp.c  -lm
+gcc -o tests qps.c
+Done.
+Run test to perform ortholog clustering.
+Run tests to see the dataset size and the number of entries.
+</pre> 
+
+</li><li> Run the generated programs, redirecting their output to a text file if necessary:  
+<pre>[gla@plquad:44 ] test &gt; result.txt
+[gla@plquad:45 ] tests
+Dataset size in bytes: 1404502
+Number of entries in the dataset: 44752
+</pre>
+
+</li><li> In the above case, 
+<tt>result.txt</tt> contains the result of ortholog clustering on the three species. 
+It uses the same output format that MultiParanoid uses. 
+[<a href="http://pl.postech.ac.kr/QuickParanoid/result.txt">result.txt</a>] 
+</li></ul>
+
+<p>
+</p><hr width="100%">
+<h3><a name="usage">Usage</a></h3>
+
+<ul>
+<li> 
+QuickParanoid builds an executable program specialized for each experiment of ortholog clustering. 
+First you need a dataset produced by InParanoid which may be stored in any working directory.  
+A dataset should have pairwise InParanoid output files between all species to be analyzed. 
+For analyzing <i>N</i> species, you need a dataset of <i>N (N-1)/2</i> InParanoid output files. 
+(The rule for naming these files is explained later.) 
+<p>
+
+Each line in the standard InParanoid output format consists of 
+(1) cluster ID number; 
+(2) InParanoid score;
+(3) species name;
+(4) seed score;
+(5) sequence name, as in the following example:
+</p><pre>3   4425    fly2k   1.000   gi7303993
+</pre>
+Optionally each line may contain a bootstrap value in an extra column after the sequence name, 
+as in the following example:
+<pre>11  3607    ensMONDO.fa   1.000   ENSMODP00000019772    100%
+</pre> 
+Bootstrap values are not used by QuickParanoid and are ignored. 
+
+<p>
+</p></li><li> 
+Create a configuration file containing the names of species in the dataset. 
+List the name of each species in a separate line in the configuration file. 
+For example, an analysis of the three species <i> fly2k</i>, <i> human2k</i>, and <i> worm2k</i>
+would use three lines as shown below:
+<pre>[gla@plquad:49 ] cat fly-human-worm/config
+fly2k
+human2k
+worm2k
+</pre>
+You may list the names of species in any order
+as long as you provide a dataset of <i>N (N-1)/2</i> files for <i>N</i> species.
+The order of species does not affect the result of ortholog clustering.
+The only exception is that 
+it may change the type of tree conflict (different-by-numbers or different-by-names)
+for those clusters with both types of tree conflicts, 
+since QuickParanoid reports whichever type of tree conflict is detected first.  
+
+<p>
+</p></li><li>
+Run <tt>qp</tt> (QuickParanoid) and provide all requested parameters.
+For each parameter, a default value is displayed which is taken if the user presses just the enter key.
+<p> 
+QuickParanoid assumes that all data files reside in the <i>dataset directory</i>
+and that every data file in it has a name concatenating the <i>data file prefix</i>,  
+a species name, the <i>data file separator</i>, and another species name in that order.
+It also assumes that a <i>configuration file</i> can be located. 
+All executable files begin with the <i>executable file prefix</i>.  
+For example, 
+</p><pre>Dataset directory [default = "." (current directory)]: fly-human-worm
+Data file prefix [default = "sqltable."]: 
+Data file separator [default = "-"]: 
+Configuration file [default = "fly-human-worm/config"]: 
+Executable file prefix [default = "test"]: 
+</pre>
+the data files reside in directory <tt>fly-human-worm</tt>,  
+and <tt>sqltable.fly2k-human2k</tt> is the data file corresponding to species <i>fly2k</i> and <i>human2k</i>;
+a configuration file <tt>fly-human-worm/config</tt> is used,
+and two programs <tt>test</tt> and <tt>tests</tt> are generated. 
+For the sake of parsing file names correctly, no species name should contain the data file separator.
+<p>
+For each pair of species, the dataset must have at least one InParanoid output file.
+For example, if <i>data file prefix</i> is <tt>sqltable.</tt> and <i>data file separator</i> is <tt>-</tt>,
+two species <tt>A</tt> and <tt>B</tt> must have at least one of 
+InParanoid output files <tt>sqltable.A-B</tt> and <tt>sqltable.B-A</tt>. 
+
+</p><p>
+</p></li><li> 
+<tt>qp</tt> first preprocesses the entire dataset. 
+An executable program <tt>dump</tt> is generated, and 
+for each data file <i>File</i> in the dataset, a new file <i>File</i><tt>_c</tt> 
+is created in the working directory. 
+For example, 
+a data file <tt>sqltable.fly2k-human2k</tt> generates a new file <tt>sqltable.fly2k-human2k_c</tt>.
+(Two intermediate files <tt>__ortholog.h</tt> and <tt>gen_header</tt> are created in the installation directory.) 
+
+<p>
+</p></li><li> Run the generated programs to perform ortholog clustering on those species specified in <tt>config</tt>,
+or to see dataset size and the number of entries. 
+The result of ortholog clustering is displayed in the MultiParanoid output format.  
+Typically you would redirect the output to a text file as shown below:
+<pre>[gla@plquad:44 ] test &gt; result.txt
+[gla@plquad:45 ] tests
+Dataset size in bytes: 1404502
+Number of entries in the dataset: 44752
+</pre>
+
+<p>
+</p></li><li> <tt>qa1</tt> and <tt>qa2</tt> are two helper programs. 
+<tt>qa1</tt> analyzes the result of ortholog clustering, and 
+<tt>qa2</tt> compares two different results of ortholog clustering from the same configuration file. 
+Run these programs with no argument to see their usage. 
+Examples of using these programs are:
+<pre>[gla@plquad:50 ] qa1
+Usage: qa1 <output file="">
+qa1 analyzes <output file=""> produced by ortholog clustering. 
+[gla@plquad:51 ] qa2
+Usage: qa2 <output file="" 1=""> <output file="" 2=""> [option]
+qa2 compares <output file="" 1=""> and <output file="" 2=""> produced by ortholog clustering.
+Option: 1 - consider only sequence names to compare clusters (default)
+        2 - consider both sequence names and tree conflicts to compare clusters
+[gla@plquad:52 ] qa1 result.txt 
+Number of clusters consisting of 1 species : 0
+Number of clusters consisting of 2 species : 2211
+Number of clusters consisting of 3 species : 3409
+Total: 5620
+[gla@plquad:53 ] qa2 result.txt fly-human-worm/Manual.out &gt; analysis1.txt
+[gla@plquad:54 ] qa2 result.txt fly-human-worm/Manual.out 2 &gt; analysis2.txt
+</output></output></output></output></output></output></pre>
+The output of <tt>qa2</tt> is self-explanatory. 
+[<a href="http://pl.postech.ac.kr/QuickParanoid/analysis1.txt">analysis1.txt</a>, 
+ <a href="http://pl.postech.ac.kr/QuickParanoid/analysis2.txt">analysis2.txt</a>] 
+</li></ul>
+
+<p>
+</p><hr width="100%">
+<h3><a name="datasets">Datasets</a></h3>
+
+<ul>
+<li>Dataset of three species <i> fly2k</i>, <i> human2k</i>, and <i> worm2k</i>:
+<a href="http://pl.postech.ac.kr/QuickParanoid/fly-human-worm.tar.gz">fly-human-worm.tar.gz</a> or
+<a href="http://pl.postech.ac.kr/QuickParanoid/fly-human-worm.zip">fly-human-worm.zip</a>.
+
+<p> 
+Uncompressing these files creates a subdirectory <tt>fly-human-worm</tt>.
+<tt>Manual.out</tt> is the manually curated data from the three species. 
+It contains a total of 221 clusters. 
+You may ignore the fourth column (is_seed_ortholog) to the last column (tree_conflict). 
+</p><p> 
+This dataset is provided by the authors of MultiParanoid 
+(Andrey Alexeyenko, Ivica Tamas, Gang Liu, and Erik L.L. Sonnhammer (2006).
+Automatic clustering of orthologs and inparalogs shared by multiple proteomes. Bioinformatics 22: e9-e15).
+</p><p>
+
+</p></li><li>Dataset of 120 species:
+<a href="http://pl.postech.ac.kr/QuickParanoid/120species.tar.gz">120species.tar.gz</a> (179 megabytes in size; 755 megabytes when uncompressed). 
+
+<p>
+
+Uncompressing the tar file creates a subdirectory <tt>120species</tt>.
+It contains 8 configuration files 
+<tt>config.5</tt>,
+<tt>config.10</tt>,
+<tt>config.15</tt>,
+<tt>config.20</tt>,
+<tt>config.30</tt>,
+<tt>config.60</tt>,
+<tt>config.90</tt>, and 
+<tt>config.120</tt>. 
+The suffix of each configuration file indicates the number of species in it. 
+</p><p>
+This dataset was built from data available at NCBI GenBank 
+(<a href="ftp://ftp.ncbi.nlm.nih.gov/genomes">ftp://ftp.ncbi.nlm.nih.gov/genomes</a>)
+using InParanoid, and was provided by 
+<a href="http://www.postech.ac.kr/lab/life/bioinformatics/">Structural Bioinformatics Laboratory</a>
+at POSTECH.
+
+</p></li></ul>
+
+<p>
+</p><hr width="100%">
+<h3><a name="extension">Extending QuickParanoid</a></h3>
+QuickParanoid preprocesses InParanoid output files to replace all string operations by much faster integer operations.
+If you wish to write your own program for analyzing InParanoid output files
+(e.g., another ortholog clustering program), 
+you can use our code for preprocessing InParanoid output files
+so that you can concentrate on implementing your algorithm rather than handling input/output. 
+This section explains how to use our code when writing such a program. 
+
+<p> 
+If you follow the instruction in the Usage section to specify the dataset directory, the data file prefix, etc., 
+a new header file <tt>__ortholog.h</tt> is created. 
+Part of <tt>__ortholog.h</tt> that declares structures for reading InParanoid output files is as follows:
+</p><pre>// sequence ---------------------------------------
+typedef struct{
+  int species_id;
+  double seed;
+  int sequence_id;
+} sequence;
+
+// cluster ----------------------------------------
+typedef struct{
+  int score;
+  int num_of_sequences;
+  sequence *sequences;
+} cluster;
+
+// dataFile ----------------------------------------
+// invariant: species_id1 must be prior to species_id2 in the species table.
+typedef struct{
+  int species_id1;
+  int species_id2;
+  int num_of_clusters;
+  cluster *clusters;
+} dataFile;
+
+//-------------------------------------------------------
+// load_dataFile takes a pair of species ids and a dataFile
+//           and parses and loads the data file of two species.
+// invariant: species_id1 &lt; species_id2
+void load_dataFile(int species_id1, int species_id2, dataFile* data);
+
+// free_dataFile takes a pointer of a datafile and frees all memory.
+void free_dataFile(dataFile* data);
+</pre>
+<ul>
+<li> A <tt>dataFile</tt> structure is created as the result of reading an InParanoid output file.
+It stores an array of <tt>cluster</tt> structures, 
+each of which describes a specific ortholog cluster. 
+</li><li> 
+A <tt>cluster</tt> structure stores stores an array of <tt>sequence</tt> structures,
+each of which describes a specific sequence. 
+</li><li>
+A <tt>sequence</tt> structure records a sequence number (<tt>sequence_id</tt>),
+a species number (<tt>species_id</tt>), and its seed score. 
+</li><li>
+To read an InParanoid output file, 
+you need two species numbers (of type <tt>int</tt>) and invoke <tt>load_dataFile</tt>. 
+The following code reads an InParanoid output file for species numbers <tt>s1</tt> and <tt>s2</tt>
+and stores the result in structure <tt>d</tt>: 
+<pre>  d = (dataFile*)malloc(sizeof(dataFile));
+  load_dataFile(s1, s2, d);
+</pre>
+
+</li></ul>
+
+<tt>__ortholog.h</tt> also declares arrays for converting species numbers to species names
+and sequence numbers to sequence names.
+Perhaps your program need to access these arrays when generating output files. 
+<pre>// num of species
+#define  NUM_OF_SPECIES 3
+
+// species id
+// invariant: species id starts at 0.
+#define _fly2k    0
+#define _human2k    1
+#define _worm2k   2
+
+// species table
+static const int species_table [] =
+  {_fly2k, _human2k, _worm2k};
+
+// species names
+// usage: species_names [species id]
+static const char* species_names [] =
+  {"fly2k", "human2k", "worm2k"};
+
+// num of sequence
+#define  NUM_OF_SEQUENCES 28494
+
+// sequence names
+// usage: sequence_names [sequence id]
+char sequence_names[NUM_OF_SEQUENCES][15];
+</pre>
+
+<ul> 
+<li> <tt>NUM_OF_SPECIES</tt> is the total number of species in the entire dataset.
+</li><li> <tt>species_names</tt> stores species names in such a way that <tt>species_names[</tt><i>i</i><tt>]</tt> 
+returns the species name corresponding to species <i>i</i>.
+</li><li> <tt>NUM_OF_SEQUENCES</tt> is the total number of sequences in the entire dataset.
+</li><li> <tt>sequence_names</tt> stores sequence names in such a way that 
+<tt>sequence_names[</tt><i>i</i><tt>]</tt> returns the sequence name corresponding to sequence <i>i</i>.
+</li></ul>
+
+If you need to retrieve a species number from a species name (a character string),  
+use the hash table <tt>ht_speciesName2Id</tt>.
+To retrieve a sequence number from a sequence name (also a character string),
+use the hash table <tt>ht_seqName2Id</tt>.
+Both hash tables are declared in <tt>__ortholog.h</tt>, and 
+<tt>hashtable.h</tt> explains how to search these hash tables. 
+
+<p>
+Your program should include <tt>__ortholog.h</tt>.
+An easy way to do this is to include the following two lines:
+</p><pre>#include "qp.h"
+#include INTERMEDIATE_HEADER_FILE
+</pre>
+ 
+<p> 
+You can compile your program in the same way that <tt>qp.c</tt> is compiled.
+If your program is <tt>foo.c</tt>, you can compile it as follows:
+</p><pre>gcc hashtable.o hashtable_itr.o ortholog.o foo.c -lm
+</pre>
+That's it!
+
+<p> 
+</p><hr width="100%">
+<h3> </h3> 
+Email us at <img src="QuickParanoid%20-%20A%20Tool%20for%20Ortholog%20Clustering_files/glamail.gif">.
+<p>
+</p><address> Programming Language Laboratory</address>
+<address> Department of Computer Science and Engineering</address>
+<address> Pohang University of Science and Technology</address>
+<address> Republic of Korea</address>
+
+
+
+</body></html>
