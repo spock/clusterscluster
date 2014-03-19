@@ -57,6 +57,7 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
 # Define location of files and programs:
 # Edited: detect the number of CPUs/cores (will probably work only in bash).
 my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`;
+$num_cpus = chomp($num_cpus);
 # Proper method:
 #use Sys::Info;
 #use Sys::Info::Constants qw( :device_cpu );
@@ -1741,13 +1742,13 @@ sub do_blast {
 
 sub do_blast_1pass {
   my @Fld = @_;
-  
+
   # $Fld [0] is query
   # $Fld [1] is database
   # $Fld [2] is query size
   # $Fld [3] is database size
   # $Fld [4] is output name
-  
+
   # Use soft masking (low complexity masking by SEG in search phase, not in alignment phase). 
   system ("$blastall -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff > $Fld[4]");
 }
@@ -1785,7 +1786,7 @@ sub do_blast_2pass {
 		}
 		else {
 			$sequencesA {$seqID} = $sequencesA {$seqID}.$aLine;
-		}		
+		}
 	}
 	close (FHA);
 
@@ -1803,16 +1804,18 @@ sub do_blast_2pass {
 		}
 		else {
 			$sequencesB {$seqID} = $sequencesB {$seqID}.$aLine;
-		}		
+		}
 	}
 	close (FHB);
 
-	# Do first pass with compositional adjustment on and soft masking.  
+	# Do first pass with compositional adjustment on and soft masking.
 	# This efficiently removes low complexity matches but truncates alignments,
 	# making a second pass necessary.
 	print STDERR "\nStarting first BLAST pass for $Fld[0] - $Fld[1] on ";
 	system("date");
-	open FHR, "$blastall -C3 -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff|";
+	my $command = "$blastall -C3 -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff|";
+	#print STDERR "command is: $command\n";
+	open FHR, $command;
 
 	%theHits = ();
 	while (<FHR>) {
