@@ -814,10 +814,10 @@ def preprocess_input_files(inputs, args):
         inputs[primary_id]['accessions'] = accessions
         inputs[primary_id]['ids'] = ids
 
-        # Write FASTA to ID.fna, raise an exception if file exists.
+        # Write FASTA to ID.fna, do nothing if file exists.
         fnafile = join(args.project, primary_id + '.fna')
         inputs[primary_id]['fnafile'] = fnafile
-        gb2fasta(infile, fnafile)
+        gb2fasta(infile, fnafile, primary_id)
 
         # Re-use antismash2 annotation if it exists.
         as2file = join(args.project, primary_id + '.gbk')
@@ -831,10 +831,10 @@ def preprocess_input_files(inputs, args):
         else:
             output_folder = join(args.project, primary_id)
             as2_options = ['run_antismash', '--outputfolder', output_folder]
-            as2_options.extend(['--cpus', '1', '--full-blast'])
+            # Remove time-consuming/unnecessary options: smcogs, clusterblast, subclusterblast.
+            as2_options.extend(['--cpus', '1', '--full-blast', '--full-hmmer'])
             as2_options.extend(['--verbose', '--all-orfs'])
-            as2_options.extend(['--input-type', 'nucl', '--clusterblast'])
-            as2_options.extend(['--subclusterblast', '--smcogs', '--full-hmmer'])
+            as2_options.extend(['--input-type', 'nucl'])
             if args.no_extensions:
                 as2_options.append('--no-extensions')
             as2_options.append(fnafile)
@@ -950,27 +950,46 @@ def run_inparanoid(inparanoidir, faafiles):
 #    pass
 
 
-def run_quickparanoid(inputs, args):
+def run_quickparanoid(inparanoidir, faafiles, args):
     '''
     Requires a config file, which is simply a list of all .faa files, 1 per line.
-    Also requires a Makefile.in:
-    #configuration file
-    CONFIG_FILE=/home/bogdan/data/manuscripts/Kutzneria_albida/all_tables/config
-    #execution files
-    EXEC_FILE=kutz # args.project
-    EXEC_FILEs=kutzs # args.project + 's'
-    When all is configured, run 'qp' (which is interactive!!!) to generate EXEC_FILE and EXEC_FILES.
+    quickparanoid MUST BE RUN from quickparanoid dir!
+    quickparanoid will generate a Makefile.in in its own directory.
+    When all is configured, run 'qp inparanoidir configfile_path execfile_prefix'
+    to generate EXEC_FILE and EXEC_FILES in the quickparanoid directory.
     Then
     EXEC_FILE > quickparanoid_result.txt
     and
     EXEC_FILEs for some stats
     '''
-    # Prepend quickparanoid path to PATH, so that it is used first.
-    # alternative path finding method: dirname(sys.argv[0])
+    configfile = join(args.project, 'quickparanoid.config')
+    logging.debug("Generating quickparanoid.config file in %s.", configfile)
+    # TODO: possibly add a check for existing configfile and quickparanoid result, and skip this?
+    # (can use args.force and exists() for checking).
+    logging.debug("(configfile is re-generated even if it exists)")
+    with open(configfile) as conf_handle:
+        conf_handle.write("\n".join(faafiles))
+
+    # Alternative path finding method: dirname(sys.argv[0])
     quickparanoid = join(dirname(realpath(__file__)), 'quickparanoid')
-    os.environ['PATH'] = quickparanoid + ':' + os.environ['PATH']
-    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
-    del quickparanoid
+    curr_path = getcwd()
+    logging.debug("Remembering current directory %s, changing to %s.", curr_path, quickparanoid)
+    chdir(quickparanoid)
+
+    qp = ['./qp', inparanoidir, configfile, args.project]
+    logging.info('Running inparanoid analysis: %s', ' '.join(qp))
+    out, err, retcode = utils.execute(qp)
+    if retcode != 0:
+        logging.debug('quickparanoid returned %d: %r while analyzing %r in %r',
+                      retcode, err, configfile, args.project)
+    del out, err, retcode
+
+    # move generated args.project and args.projects executables to the args.project directory
+    # run generated executables to obtain the results file, name it quickparanoid-args.project.txt
+
+    logging.debug("Returning to %s from %s.", curr_path, quickparanoid)
+    chdir(curr_path)
+    del quickparanoid, curr_path
 
 
 def main():
