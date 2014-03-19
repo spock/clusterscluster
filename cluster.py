@@ -39,7 +39,6 @@ cluster outputs CSV files with collected information for further analysis.
 from __future__ import print_function
 import sys
 import logging
-import itertools
 import os
 
 from pprint import pprint
@@ -51,7 +50,7 @@ from Bio import SeqIO
 from Bio.Alphabet import generic_dna#, generic_protein
 from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
-from itertools import permutations
+from itertools import permutations, combinations
 
 from lib import MultiParanoid as MP
 from lib.gb2fasta import gb2fasta
@@ -414,7 +413,7 @@ def process(args):
 
 
     print('Constructing gene-based cluster links.')
-    pairs = itertools.combinations(all_clusters, 2)
+    pairs = combinations(all_clusters, 2)
     # Simple counters of the number of cluster pairs/weights we are processing.
     num_pairs = 0
     # Storage for bins to show weights distribution.
@@ -764,7 +763,7 @@ def preprocess_input_files(inputs, args):
             logging.debug('record name and ID are %s and %s', r.name, r.id)
             if not r.id or r.id == '':
                 logging.error('Genome %s has no usable ID!' % input)
-                raise Exception('GenomeHasNoNameError')
+                raise Exception('GenomeHasNoIDError')
             contigs += 1
             accessions.append(r.name)
             ids.append(r.id)
@@ -778,6 +777,10 @@ def preprocess_input_files(inputs, args):
                 primary_id = r.id
                 primary_length = len(r.seq)
             genome_size += len(r.seq)
+        if '-' in primary_id:
+            logging.error('quickparanoid allows no dashes in filenames; genome "%s" has a dash!',
+                          primary_id)
+            raise Exception('DashesInIDsAreForbiddenError')
         del primary_length, r
         # Remove primary accession from the list of all accessions.
         accessions.remove(primary_accession)
@@ -862,19 +865,17 @@ def preprocess_input_files(inputs, args):
         del ids, primary_id
     # When all the workers have finished: make sure they exit, using a keyword.
 
-def run_inparanoid(inputs, args):
-    # Prepend custom_inparanoid path to PATH, so that it is used first.
-    # alternative path finding method: dirname(sys.argv[0])
-    custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
-    os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
-    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
-    del custom_inparanoid
-
+def prepare_inparanoid(inputs, args):
+    '''
+    Set up directory and .faa-files symlink for running InParanoid and
+    quickparanoid. Prepare list of .faa-files w/o paths, and return it.
+    '''
     # Collect all faafile names into a list without paths.
     faafiles = []
     for _ in inputs.itervalues():
         faafiles.append(basename(_['faafile']))
     del _
+    faafiles.sort()
 
     # Put everything inparanoid-related into a subdir.
     inparanoidir = join(args.project, 'inparanoid')
@@ -883,11 +884,21 @@ def run_inparanoid(inputs, args):
 
     # Symlink all faa files there.
     for _ in faafiles:
-        # TODO: can parallelize, or join with the code below.
+        # TODO: can parallelize.
         linkname = join(inparanoidir, _)
         if not (args.force and exists(linkname)):
             symlink(join('..', _), linkname)
     del linkname, _
+
+    return inparanoidir, faafiles
+
+def run_inparanoid(inparanoidir, faafiles):
+    # Prepend custom_inparanoid path to PATH, so that it is used first.
+    # alternative path finding method: dirname(sys.argv[0])
+    custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
+    os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
+    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
+    del custom_inparanoid
 
     # CD to the inparanoid directory.
     curr_path = getcwd()
@@ -915,8 +926,7 @@ def run_inparanoid(inputs, args):
     del blast_pair, pair, out, err, retcode
 
     # FIXME: make run in parallel.
-    # FIXME: this must run on combinations, not permutations!
-    for pair in permutations(faafiles, 2):
+    for pair in combinations(faafiles, 2):
         inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
         logging.info('Running inparanoid analysis: %s', ' '.join(inparanoid_pair))
         out, err, retcode = utils.execute(inparanoid_pair)
@@ -929,7 +939,39 @@ def run_inparanoid(inputs, args):
     chdir(curr_path)
     logging.debug("Changed directory from %s to %s.", inparanoidir, curr_path)
     del inparanoidir, curr_path
-    del faafiles
+
+
+# multiparanoid, reportedly, cannot handle more than ~20 species.
+# multiparanoid requires program file editing for input and output paths.
+#def run_multiparanoid(inputs, args):
+#    '''
+#    multiparanoid.pl -species Actinosynnema_mirum_DSM43827.faa+Amycolatopsis_mediterranei_S699.faa+Kitasatospora_setae_KM6054.faa
+#    '''
+#    pass
+
+
+def run_quickparanoid(inputs, args):
+    '''
+    Requires a config file, which is simply a list of all .faa files, 1 per line.
+    Also requires a Makefile.in:
+    #configuration file
+    CONFIG_FILE=/home/bogdan/data/manuscripts/Kutzneria_albida/all_tables/config
+    #execution files
+    EXEC_FILE=kutz # args.project
+    EXEC_FILEs=kutzs # args.project + 's'
+    When all is configured, run 'qp' (which is interactive!!!) to generate EXEC_FILE and EXEC_FILES.
+    Then
+    EXEC_FILE > quickparanoid_result.txt
+    and
+    EXEC_FILEs for some stats
+    '''
+    # Prepend quickparanoid path to PATH, so that it is used first.
+    # alternative path finding method: dirname(sys.argv[0])
+    quickparanoid = join(dirname(realpath(__file__)), 'quickparanoid')
+    os.environ['PATH'] = quickparanoid + ':' + os.environ['PATH']
+    logging.debug('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
+    del quickparanoid
+
 
 def main():
     '''Command line options.'''
@@ -994,9 +1036,13 @@ def main():
     inputs = {} # Map genome ID to other properties.
 
     preprocess_input_files(inputs, args)
-    run_inparanoid(inputs, args)
+    inparanoidir, faafiles = prepare_inparanoid(inputs, args)
+    run_inparanoid(inparanoidir, faafiles)
 
-#    run multi/quick-paranoid, put the resulting single table into the curdir
+    # TODO: run quickparanoid, put the resulting single table into the curdir.
+    run_quickparanoid(inputs, args)
+    del inparanoidir, faafiles
+
 
 #    process(args)
     return 0
