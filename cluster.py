@@ -424,19 +424,20 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
         # species are used.
 
 
-def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters, numbers2products, coords2numbers, clustersizes, all_clusters):
+def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
+                                 numbers2products, coords2numbers, clustersizes,
+                                 all_clusters):
     '''
     All of: cluster2genes, gene2clusters, numbers2products, coords2numbers,
             clustersizes, all_clusters
     will be updated upon execution of this function.
     '''
-    # Dict of per-species GenBank records, e.g. genbank[id] = [rec1, rec2, ...]
-    genbank = {}
     # Dict of per-species interval trees of clusters, one per record.
     clustertrees = {}
 
     species = inputs.keys()
     species_count = len(species)
+    rulesdict = hmm_detection.create_rules_dict()
     logging.info('Parsing genbank files in parallel.')
     task_queue = Queue() # record.id + path to antismashed genbank, or 'STOP'.
     done_queue = Queue()
@@ -444,6 +445,7 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters, num
     # Parallel worker.
     def worker(tasks, done):
         try:
+            # k = record.id, gb = path to antismash2 genbank file
             (k, gb) = tasks.get() # By default, there is no timeout.
         except: # Queue.Empty
             logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
@@ -452,44 +454,14 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters, num
         if gb == 'STOP':
             logging.debug("STOP found, exiting.")
             return
-        # FIXME: add all of parsing in here.
-        done.put((k, list(SeqIO.parse(gb, "genbank", generic_dna))))
-
-    logging.info("Starting %s GenBank parse workers.", cpu_count())
-    for _ in range(min(cpu_count(), species_count)):
-        # TODO: do I need to join() these processes later?
-        Process(target=worker, args=(task_queue, done_queue)).start()
-    del _
-
-    logging.debug("Putting ID-path tuples into task_queue")
-    for k, v in inputs.iteritems():
-        # submit record.id and /path/to/genbank
-        task_queue.put((k, v['as2file']))
-    del k, v
-
-    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
-    for _ in range(cpu_count()):
-        task_queue.put(0, 'STOP')
-    del _
-
-    for _ in range(len(species)):
-        k, rec_list = done_queue.get()
-        genbank[k] = rec_list
-    del _, rec_list
-
-    print('\ttotal records parsed: %s' % len(genbank))
-    task_queue.close()
-    done_queue.close()
-
-
-    # FIXME: merge into the genbank parsing worker,
-    # to remove genbanks from memory when done.
-    print('Parsing clusters and assigning genes to them:')
-    logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
-    rulesdict = hmm_detection.create_rules_dict()
-    if args.trim:
-        logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
-    for s in species:
+        # FIXME: merge here genbank parsing.
+        genbank = list(SeqIO.parse(gb, "genbank", generic_dna))
+        # TODO: all the parallel output will get mangled, consider suppressing/removing.
+        print('Parsing clusters and assigning genes to them:')
+        logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
+        if args.trim:
+            logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
+        # FIXME: XXX: TODO: HERE
         logging.debug('\tprocessing %s (%s)', s, inputs[s]['species'])
         clustertrees[s] = {}
         cluster2genes[s] = {}
@@ -580,6 +552,34 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters, num
                         del gene_name
         print('\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes))
         del num_genes
+        done.put((k, something?))
+
+    logging.info("Starting %s GenBank parse workers.", cpu_count())
+    for _ in range(min(cpu_count(), species_count)):
+        # TODO: do I need to join() these processes later?
+        Process(target=worker, args=(task_queue, done_queue)).start()
+    del _
+
+    logging.debug("Putting ID-path tuples into task_queue")
+    for k, v in inputs.iteritems():
+        # submit record.id and /path/to/genbank
+        task_queue.put((k, v['as2file']))
+    del k, v
+
+    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+    for _ in range(cpu_count()):
+        task_queue.put(0, 'STOP')
+    del _
+
+    for _ in range(len(species)):
+        k, rec_list = done_queue.get()
+        genbank[k] = rec_list
+    del _, rec_list
+
+    print('\ttotal records parsed: %s' % len(genbank))
+    task_queue.close()
+    done_queue.close()
+
     # Extra verification.
     for s in species:
         for num, cl in cluster2genes[s].iteritems():
