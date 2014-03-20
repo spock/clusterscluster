@@ -64,7 +64,7 @@ from lib import hmm_detection
 __all__ = []
 __version__ = 0.4
 __date__ = '2013-07-10'
-__updated__ = '2014-03-14'
+__updated__ = '2014-03-20'
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -122,11 +122,208 @@ def bin_key(weight):
     if weight <= 0.95: return 0.95
     return 1.0
 
+#
+# Set of functions used by process()
+#
 
-def process(args):
-    '''Main method which does all the work. 'args' contains:
-    "species" is the path to the file containing all strains in the analysis.
-    "paranoid" is the path to multi/quick-paranoid output file.
+def get_gene_links_to_bioclusters(gene, mp, locus2species, gene2clusters):
+    '''For the given gene,
+    - find to which orthology group/cluster it belongs,
+    - check if other genes from that group are a part of some biosynthetic clusters,
+    - return the list of those biosynthetic clusters'''
+    if gene not in mp.gene2ortho:
+        return []
+    bioclusters = []
+    for orthoclust in mp.gene2ortho[gene]:
+        logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
+        for xeno_gene in mp.ortho2genes[orthoclust]:
+            # Extract LOCUS from gene name, find species from it.
+            xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
+            # Check if xeno_gene belongs to any biosynthetic clusters.
+            if xeno_gene in gene2clusters[xeno_species]:
+                bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
+                logging.debug('\txeno_gene %s belongs to %s', xeno_gene,
+                              gene2clusters[xeno_species][xeno_gene])
+    return bioclusters
+
+
+def calculate_links(c1, c2, cluster2genes):
+    '''Given biosynthetic clusters c1 and c2, count the number of unique
+    orthologoues gene pairs ("links") between them.'''
+    links = 0
+    for gene in cluster2genes[c1[0]][c1[1]]:
+        if c2 in get_gene_links_to_bioclusters(gene):
+            links += 1
+    return links
+
+
+def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
+                     numbers2products, args):
+    '''Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
+    link between them.'''
+    c1_genes = len(cluster2genes[c1[0]][c1[1]])
+    c2_genes = len(cluster2genes[c2[0]][c2[1]])
+    links1 = float(min(calculate_links(c1, c2), c1_genes))
+    links2 = float(min(calculate_links(c2, c1), c2_genes))
+    logging.debug('\tlinks1 = %s and links2 = %s for %s and %s (%s and %s genes)',
+                  links1, links2, c1, c2, c1_genes, c2_genes)
+    if args.strict:
+        # No link can be larger than the number of genes in the 2nd cluster.
+        if links1 > c2_genes:
+            links1 = float(c2_genes)
+            logging.debug('strict mode, new links1 is %s', links1)
+        if links2 > c1_genes:
+            links2 = float(c1_genes)
+            logging.debug('strict mode, new links2 is %s', links2)
+        try:
+            assert links1 <= min(c1_genes, c2_genes) and links2 <= min(c1_genes, c2_genes)
+        except:
+            logging.exception('c1: %s ; c2: %s', c1, c2)
+            logging.exception('c1_genes: %s (c1: %s)', c1_genes, cluster2genes[c1[0]][c1[1]])
+            logging.exception('c2_genes: %s (c2: %s)', c2_genes, cluster2genes[c2[0]][c2[1]])
+            logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
+                              links1, links2, c1_genes, c2_genes)
+            raise
+    # Link weight formula.
+    # Multiple versions were tried/examined.
+    # 1. weight = links/min(c1_genes, c2_genes)
+    # Unfortunately, this one causes 1-gene clusters to have too many weight-1.0 links.
+    # 2. weight = (links/2.0) * ( 1/min(c1_genes, c2_genes) + 1/max(c1_genes, c2_genes) )
+    # (or the equivalent weight = 0.5 * links * ( 1.0 / c1_genes + 1.0 / c2_genes ) )
+    # was giving values > 1.0, as 'links' can be > than c1 or c2.
+    # 3. "safe" derivative of #2,
+    # weight = 0.5* ( min(c1_genes, links) / c1_genes + min(c2_genes, links) / c2_genes )
+    # was too optimistic: 0.53 for links = 1, c1 = 1, c2 = 20.
+    # The least biased formula is below. It properly penalizes if the c1_genes and
+    # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
+    size1 = float(clustersizes[c1])
+    size2 = float(clustersizes[c2])
+    if args.use_sizes:
+        # Use relative physical cluster sizes as link contribution weight.
+        total_size = float(size1 + size2)
+        weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
+        if weight > 0:
+            logging.debug('\tweight %s\t%s of %s\t+\t%s of %s', round(weight, 2),
+                          round(size1/total_size, 2), round(links1/c1_genes, 2),
+                          round(size2/total_size, 2), round(links2/c2_genes, 2))
+    else:
+        both = float(c1_genes + c2_genes)
+        weight = links1/both + links2/both
+    if args.scale:
+        weight2 = weight * min(size1, size2) / max(size1, size2)
+        logging.debug('\tscaled weight %s to %s', round(weight, 2), round(weight2, 2))
+    try:
+        assert weight <= 1.0001 # precision allowance
+    except:
+        logging.exception('weight: %s', weight)
+        logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
+                          links1, links2, c1_genes, c2_genes)
+        raise
+    if weight >= args.threshold:
+        if c1[0] == c2[0]:
+            intra_one.append((c1, numbers2products[c1[0]][c1[1]],
+                              len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1],
+                              c2, numbers2products[c2[0]][c2[1]],
+                              len(cluster2genes[c2[0]][c2[1]]),
+                              clustersizes[c2], round(weight, 2)))
+        else:
+            inter_one.append((c1, numbers2products[c1[0]][c1[1]],
+                              len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1],
+                              c2, numbers2products[c2[0]][c2[1]],
+                              len(cluster2genes[c2[0]][c2[1]]),
+                              clustersizes[c2], round(weight, 2)))
+    return weight
+
+
+def get_unique_clusters(s, cluster2genes, weights_clean, allowed_species = False):
+    '''returns the quantity of unique clusters in the provided species "s".
+    Linked clusters must be from "allowed_species", if specified;
+    otherwise, all species are searched for linked clusters.'''
+    # Counter of non-unique clusters.
+    non_unique = 0
+    for u in cluster2genes[s]:
+        if (s, u) in weights_clean:
+            links_to = weights_clean[(s, u)].keys()
+            for link in links_to:
+                if link[0] == s:
+                    continue
+                if allowed_species and link[0] not in allowed_species:
+                    continue
+                non_unique += 1
+                break
+    return len(cluster2genes[s]) - non_unique
+
+
+def graph_unique_change_when_adding(species, cluster2genes, reverse = True):
+    print('Graph of the change of unique clusters fraction with each new added genome.')
+    if not reverse:
+        print('(reversed: from genomes with less clusters to genomes with more)')
+    # List of tuples (number_of_clusters, species), for sorting.
+    numclust_species = []
+    for s in species:
+        numclust_species.append((len(cluster2genes[s]), s))
+    # 'reverse' means DESC
+    numclust_species.sort(reverse=reverse)
+    # List of the species we are allowed to look for linked clusters in.
+    allowed_species = []
+    # Horizontal bar "height" (length).
+    height = 90
+    first = True
+    for (numclust, s) in numclust_species:
+        if first: # no need to calculate anything, ratio is 1.0
+            first = False
+            ratio = 1.0
+        else:
+            unique = get_unique_clusters(s, allowed_species)
+            ratio = round(float(unique) / numclust, 2)
+        allowed_species.append(s)
+        bar = '#' * int(round(height*ratio))
+        bar = bar.ljust(height)
+        print('%s\t%s\t%s' % (bar, ratio, s))
+
+def cumulative_growth(species, cluster2genes, reverse = True):
+    '''Shows expected and observed growth of the number of unique clusters
+    with each new genome'''
+    print('Graph of the ratio of observed/expected total unique clusters.')
+    if not reverse:
+        print('(reversed: from genomes with less clusters to genomes with more)')
+    # List of tuples (number_of_clusters, species), for sorting.
+    numclust_species = []
+    for s in species:
+        numclust_species.append((len(cluster2genes[s]), s))
+    # 'reverse' means DESC
+    numclust_species.sort(reverse=reverse)
+    # All-important counters.
+    total_expected = 0
+    total_observed = 0
+    # List containing all the data for the table, as tuples
+    # (observed, expected, ratio, species)
+    table =[]
+    # Horizontal bar "height" (length).
+    height = 90
+    # Draw a reference 100% line.
+    print('%s\t%s\t%s' % ('#' * height, 1.0, 'Reference'))
+    for (numclust, s) in numclust_species:
+        total_expected += len(cluster2genes[s])
+        total_observed += get_unique_clusters(s)
+        ratio = round(float(total_observed) / total_expected, 2)
+        table.append((total_observed, total_expected, round(ratio, 2), s))
+        bar = '#' * int(round(height*ratio))
+        bar = bar.ljust(height)
+        print('%s\t%s\t%s' % (bar, ratio, s))
+    print('Data table')
+    print('Obs.\tExp.\tRatio\tGenome')
+    for item in table:
+        print('%s\t%s\t%s\t%s' % item)
+
+#
+# /Set of functions used by process()
+#
+
+def process(inputs, paranoid, args):
+    '''
+    Analyze quickparanoid results. 'args' contains:
+    "paranoid" is the path to quickparanoid output file.
     "paths" is a list of paths to genbank files we want to compare.
     "threshold" is a biocluster-biocluster link weight threshold.
     "prefix" is prepended to all output files.
@@ -138,30 +335,44 @@ def process(args):
     "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
     "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
     "use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
-    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).'''
+    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).
+    '''
+    # FIXME: re-think this entire function.
+    # TODO: modularize?...
+    # TODO: replace species with either inputs.keys() or faafiles.
+    # TODO: replace paths with args.paths, or inputs?
+    # TODO: replace 'trim' support with no-extensions support (?).
+    # TODO: deprecate skipp? (can be filtered out at the analysis step)
+    # TODO: add memory cleanup everywhere :)
+    # TODO: switch from record.name to record.id.
 
-    mp = MP.MultiParanoid(args.paranoid, args.no_tree_problems, args.no_name_problems)
+    mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
 
     # Declare important variables.
     # List of recognized species.
+    # TODO: can replace with inputs.keys()
+    # TODO: replace all uses of 'species' as an identifier with record.id.
     species = []
     # List of all clusters from all species.
     all_clusters = []
     # Map of per-species cluster numbers to their products
     numbers2products = {}
     # Dict of per-species GenBank records.
+    # FIXME: all are too much to keep in memory, try to keep only 2 at a time.
     genbank = {}
     # Dict of per-species interval trees of clusters.
+    # FIXME: all are too much to keep in memory, try to keep only 2 at a time.
     clustertrees = {}
     # Per-species mapping of cluster coordinates tuple to their numbers.
     coords2numbers = {}
-    # 2-level nested dict of cluster pairs link weights, e.g. cluster_weights['A'] = {'B': 0.95, ...}
+    # 2-level nested dict of cluster pairs link weights,
+    # e.g. cluster_weights['A'] = {'B': 0.95, ...}
     cluster_weights = {}
     # Same as above, but without duplicate links to other species.
     weights_clean = {}
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
-    # Mapping of record.names from GenBank files (LOCUS) to species.
+    # Mapping of record.id from GenBank files (LOCUS) to species.
     locus2species = {}
     # Dict of per-species dicts of cluster-to-gene relations.
     # Each cluster dict uses a key = (species, number).
@@ -175,113 +386,8 @@ def process(args):
     clustersizes = {}
 
 
-    def get_gene_links_to_bioclusters(gene):
-        '''For the given gene,
-        - find to which orthology group/cluster it belongs,
-        - check if other genes from that group are a part of some biosynthetic clusters,
-        - return the list of those biosynthetic clusters'''
-        if gene not in mp.gene2ortho:
-            return []
-        bioclusters = []
-        for orthoclust in mp.gene2ortho[gene]:
-            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
-            for xeno_gene in mp.ortho2genes[orthoclust]:
-                # Extract LOCUS from gene name, find species from it.
-                xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
-                # Check if xeno_gene belongs to any biosynthetic clusters.
-                if xeno_gene in gene2clusters[xeno_species]:
-                    bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
-                    logging.debug('\txeno_gene %s belongs to %s', xeno_gene,
-                                  gene2clusters[xeno_species][xeno_gene])
-        return bioclusters
-
-
-    def calculate_links(c1, c2):
-        '''Given biosynthetic clusters c1 and c2, count the number of unique
-        orthologoues gene pairs ("links") between them.'''
-        links = 0
-        for gene in cluster2genes[c1[0]][c1[1]]:
-            if c2 in get_gene_links_to_bioclusters(gene):
-                links += 1
-        return links
-
-
-    def calculate_weight(c1, c2):
-        '''Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
-        link between them.'''
-        c1_genes = len(cluster2genes[c1[0]][c1[1]])
-        c2_genes = len(cluster2genes[c2[0]][c2[1]])
-        links1 = float(min(calculate_links(c1, c2), c1_genes))
-        links2 = float(min(calculate_links(c2, c1), c2_genes))
-        logging.debug('\tlinks1 = %s and links2 = %s for %s and %s (%s and %s genes)',
-                      links1, links2, c1, c2, c1_genes, c2_genes)
-        if args.strict:
-            # No link can be larger than the number of genes in the 2nd cluster.
-            if links1 > c2_genes:
-                links1 = float(c2_genes)
-                logging.debug('strict mode, new links1 is %s', links1)
-            if links2 > c1_genes:
-                links2 = float(c1_genes)
-                logging.debug('strict mode, new links2 is %s', links2)
-            try:
-                assert links1 <= min(c1_genes, c2_genes) and links2 <= min(c1_genes, c2_genes)
-            except:
-                logging.exception('c1: %s ; c2: %s', c1, c2)
-                logging.exception('c1_genes: %s (c1: %s)', c1_genes, cluster2genes[c1[0]][c1[1]])
-                logging.exception('c2_genes: %s (c2: %s)', c2_genes, cluster2genes[c2[0]][c2[1]])
-                logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
-                                  links1, links2, c1_genes, c2_genes)
-                raise
-        # Link weight formula.
-        # Multiple versions were tried/examined.
-        # 1. weight = links/min(c1_genes, c2_genes)
-        # Unfortunately, this one causes 1-gene clusters to have too many weight-1.0 links.
-        # 2. weight = (links/2.0) * ( 1/min(c1_genes, c2_genes) + 1/max(c1_genes, c2_genes) )
-        # (or the equivalent weight = 0.5 * links * ( 1.0 / c1_genes + 1.0 / c2_genes ) )
-        # was giving values > 1.0, as 'links' can be > than c1 or c2.
-        # 3. "safe" derivative of #2,
-        # weight = 0.5* ( min(c1_genes, links) / c1_genes + min(c2_genes, links) / c2_genes )
-        # was too optimistic: 0.53 for links = 1, c1 = 1, c2 = 20.
-        # The least biased formula is below. It properly penalizes if the c1_genes and
-        # c2_genes are too different, and is also safe against links > c1_genes or links > c2_genes.
-        size1 = float(clustersizes[c1])
-        size2 = float(clustersizes[c2])
-        if args.use_sizes:
-            # Use relative physical cluster sizes as link contribution weight.
-            total_size = float(size1 + size2)
-            weight = 1 / total_size * ( size1 * links1 / c1_genes + size2 * links2 / c2_genes )
-            if weight > 0:
-                logging.debug('\tweight %s\t%s of %s\t+\t%s of %s', round(weight, 2),
-                              round(size1/total_size, 2), round(links1/c1_genes, 2),
-                              round(size2/total_size, 2), round(links2/c2_genes, 2))
-        else:
-            both = float(c1_genes + c2_genes)
-            weight = links1/both + links2/both
-        if args.scale:
-            weight2 = weight * min(size1, size2) / max(size1, size2)
-            logging.debug('\tscaled weight %s to %s', round(weight, 2), round(weight2, 2))
-        try:
-            assert weight <= 1.0001 # precision allowance
-        except:
-            logging.exception('weight: %s', weight)
-            logging.exception('links1: %s ; links2: %s ; c1_genes: %s ; c2_genes: %s',
-                              links1, links2, c1_genes, c2_genes)
-            raise
-        if weight >= args.threshold:
-            if c1[0] == c2[0]:
-                intra_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
-            else:
-                inter_one.append((c1, numbers2products[c1[0]][c1[1]], len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1], c2, numbers2products[c2[0]][c2[1]], len(cluster2genes[c2[0]][c2[1]]), clustersizes[c2], round(weight, 2)))
-        return weight
-
-
-    print('Reading species list file:')
-    for s in open(species):
-        species.append(s.strip())
-    species.sort(key = lambda s: s.lower())
-    print('\ttotal species: %s' % len(species))
-
-
+    # FIXME: this parallel implementation is not reliable, modify to
+    # use some "stop" signals (by the number of CPUs/cores).
     logging.info('Reading all genbank files in parallel.')
     task_queue = Queue()
     done_queue = Queue()
@@ -295,6 +401,7 @@ def process(args):
                 (s, gb) = tasks.get_nowait()
             except: # Queue.Empty
                 return
+            # FIXME: need to support multi-locus genbank files.
             done.put((s, SeqIO.read(gb, "genbank")))
 
     # Detect which species it is by the first 5 characters.
@@ -616,7 +723,6 @@ def process(args):
             # looks just like the above weights table, but now only clusters from single
             # species are used.
 
-
     print('All pairs of clusters with link weight over %s (inter-species).', args.threshold)
 #        pprint(inter_one)
     print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
@@ -631,96 +737,11 @@ def process(args):
               (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w), end='')
     print()
 
-
-    def get_unique_clusters(s, allowed_species = False):
-        '''returns the quantity of unique clusters in the provided species "s".
-        Linked clusters must be from "allowed_species", if specified;
-        otherwise, all species are searched for linked clusters.'''
-        # Counter of non-unique clusters.
-        non_unique = 0
-        for u in cluster2genes[s]:
-            if (s, u) in weights_clean:
-                links_to = weights_clean[(s, u)].keys()
-                for link in links_to:
-                    if link[0] == s:
-                        continue
-                    if allowed_species and link[0] not in allowed_species:
-                        continue
-                    non_unique += 1
-                    break
-        return len(cluster2genes[s]) - non_unique
-
-
-    def graph_unique_change_when_adding(reverse = True):
-        print('Graph of the change of unique clusters fraction with each new added genome.')
-        if not reverse:
-            print('(reversed: from genomes with less clusters to genomes with more)')
-        # List of tuples (number_of_clusters, species), for sorting.
-        numclust_species = []
-        for s in species:
-            numclust_species.append((len(cluster2genes[s]), s))
-        # 'reverse' means DESC
-        numclust_species.sort(reverse=reverse)
-        # List of the species we are allowed to look for linked clusters in.
-        allowed_species = []
-        # Horizontal bar "height" (length).
-        height = 90
-        first = True
-        for (numclust, s) in numclust_species:
-            if first: # no need to calculate anything, ratio is 1.0
-                first = False
-                ratio = 1.0
-            else:
-                unique = get_unique_clusters(s, allowed_species)
-                ratio = round(float(unique) / numclust, 2)
-            allowed_species.append(s)
-            bar = '#' * int(round(height*ratio))
-            bar = bar.ljust(height)
-            print('%s\t%s\t%s' % (bar, ratio, s))
-
-
     graph_unique_change_when_adding()
 #    graph_unique_change_when_adding(False)
 
-
-    def cumulative_growth(reverse = True):
-        '''Shows expected and observed growth of the number of unique clusters
-        with each new genome'''
-        print('Graph of the ratio of observed/expected total unique clusters.')
-        if not reverse:
-            print('(reversed: from genomes with less clusters to genomes with more)')
-        # List of tuples (number_of_clusters, species), for sorting.
-        numclust_species = []
-        for s in species:
-            numclust_species.append((len(cluster2genes[s]), s))
-        # 'reverse' means DESC
-        numclust_species.sort(reverse=reverse)
-        # All-important counters.
-        total_expected = 0
-        total_observed = 0
-        # List containing all the data for the table, as tuples
-        # (observed, expected, ratio, species)
-        table =[]
-        # Horizontal bar "height" (length).
-        height = 90
-        # Draw a reference 100% line.
-        print('%s\t%s\t%s' % ('#' * height, 1.0, 'Reference'))
-        for (numclust, s) in numclust_species:
-            total_expected += len(cluster2genes[s])
-            total_observed += get_unique_clusters(s)
-            ratio = round(float(total_observed) / total_expected, 2)
-            table.append((total_observed, total_expected, round(ratio, 2), s))
-            bar = '#' * int(round(height*ratio))
-            bar = bar.ljust(height)
-            print('%s\t%s\t%s' % (bar, ratio, s))
-        print('Data table')
-        print('Obs.\tExp.\tRatio\tGenome')
-        for item in table:
-            print('%s\t%s\t%s\t%s' % item)
-
     cumulative_growth()
 #    cumulative_growth(False)
-
 
     # Finally, show a list of all species, stating the number of unique
     # clusters they have.
@@ -736,6 +757,7 @@ def process(args):
         bar = '#' * int(round(height*ratio))
         bar = bar.ljust(height)
         print('%s\t%s\t%s\t%s\t%s' % (bar, unique, total, ratio, s))
+
 
 def preprocess_input_files(inputs, args):
     '''
@@ -852,7 +874,7 @@ def preprocess_input_files(inputs, args):
             logging.debug('antismash2 file (source): %s', antismash2_file)
             rename(antismash2_file, as2file )
             rmtree(output_folder)
-            del output_folder
+            del output_folder, out
 
         faafile = join(args.project, primary_id + '.faa')
         inputs[primary_id]['faafile'] = faafile
@@ -875,7 +897,7 @@ def prepare_inparanoid(inputs, args):
     for _ in inputs.itervalues():
         faafiles.append(basename(_['faafile']))
     del _
-    faafiles.sort()
+    faafiles.sort(key = lambda s: s.lower())
 
     # Put everything inparanoid-related into a subdir.
     inparanoidir = realpath(join(args.project, 'inparanoid'))
@@ -1064,10 +1086,6 @@ def main():
     logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
-    # TODO: just pass 'args' around and avoid globals and long lists of arguments?
-    global height
-    height = args.height
-
     print('Used arguments and options:')
     pprint(vars(args))
 
@@ -1091,7 +1109,7 @@ def main():
     del inparanoidir, faafiles
 
     # Process result_path.
-#    process(args)
+    process(inputs, result_path, args)
     return 0
 
 
