@@ -126,7 +126,7 @@ def bin_key(weight):
 # Set of functions used by process()
 #
 
-def get_gene_links_to_bioclusters(gene, mp, locus2species, gene2clusters):
+def get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
     '''For the given gene,
     - find to which orthology group/cluster it belongs,
     - check if other genes from that group are a part of some biosynthetic clusters,
@@ -138,7 +138,9 @@ def get_gene_links_to_bioclusters(gene, mp, locus2species, gene2clusters):
         logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
         for xeno_gene in mp.ortho2genes[orthoclust]:
             # Extract LOCUS from gene name, find species from it.
-            xeno_species = locus2species[xeno_gene.rsplit('.')[-1]]
+            # FIXME: rsplit('.') is not reliable!
+            #xeno_species = inputs[xeno_gene.rsplit('.')[-1]]
+            xeno_species = xeno_gene.rsplit('.')[-1]
             # Check if xeno_gene belongs to any biosynthetic clusters.
             if xeno_gene in gene2clusters[xeno_species]:
                 bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
@@ -147,24 +149,24 @@ def get_gene_links_to_bioclusters(gene, mp, locus2species, gene2clusters):
     return bioclusters
 
 
-def calculate_links(c1, c2, cluster2genes):
+def calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs):
     '''Given biosynthetic clusters c1 and c2, count the number of unique
     orthologoues gene pairs ("links") between them.'''
     links = 0
     for gene in cluster2genes[c1[0]][c1[1]]:
-        if c2 in get_gene_links_to_bioclusters(gene):
+        if c2 in get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
             links += 1
     return links
 
 
 def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
-                     numbers2products, args):
+                     numbers2products, mp, gene2clusters, args, inputs):
     '''Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
     link between them.'''
     c1_genes = len(cluster2genes[c1[0]][c1[1]])
     c2_genes = len(cluster2genes[c2[0]][c2[1]])
-    links1 = float(min(calculate_links(c1, c2), c1_genes))
-    links2 = float(min(calculate_links(c2, c1), c2_genes))
+    links1 = float(min(calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs), c1_genes))
+    links2 = float(min(calculate_links(c2, c1, cluster2genes, mp, gene2clusters, inputs), c2_genes))
     logging.debug('\tlinks1 = %s and links2 = %s for %s and %s (%s and %s genes)',
                   links1, links2, c1, c2, c1_genes, c2_genes)
     if args.strict:
@@ -508,7 +510,7 @@ def process(inputs, paranoid, args):
         done.put((k, list(SeqIO.parse(gb, "genbank", generic_dna))))
 
     logging.info("Starting %s GenBank parse workers.", cpu_count())
-    for _ in range(cpu_count()):
+    for _ in range(min(cpu_count(), len(species))):
         # TODO: do I need to join() these processes later?
         Process(target=worker, args=(task_queue, done_queue)).start()
     del _
@@ -516,7 +518,7 @@ def process(inputs, paranoid, args):
     logging.debug("Putting ID-path tuples into task_queue")
     for k, v in inputs.iteritems():
         # submit record.id and /path/to/genbank
-        task_queue.put((k, v['infile']))
+        task_queue.put((k, v['as2file']))
     del k, v
 
     logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
@@ -550,7 +552,7 @@ def process(inputs, paranoid, args):
         gene2clusters[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
         for r in genbank[s]: # genbank[s] is a list of records
-            record_number = genbank.index(r)
+            record_number = genbank[s].index(r)
             clustertrees[s][record_number] = IntervalTree()
             for f in r.features:
                 if f.type == 'cluster':
@@ -565,27 +567,33 @@ def process(inputs, paranoid, args):
                     if args.trim and f.qualifiers['product'][0] != 'putative':
                         # Use cluster type to get extension size, including composite types.
                         extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
-                        # If cluster is at the genome edge - skip extension trimming.
-                        if start == 0:
-                            logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
-                                         parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                        # If cluster is shorter than double extension, do not trim.
+                        if 2 * extension >= (end - start):
+                            logging.info('\tnot trimming #%s (%s) - shorter than double extension 2 * %s',
+                                         parse_cluster_number(f.qualifiers['note']),
+                                         f.qualifiers['product'][0], extension)
                         else:
-                            start += extension
-                        if end == len(r):
-                            logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
-                                         parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
-                        else:
-                            end -= extension
-                        try:
-                            assert start < end
-                        except:
-                            logging.exception('trimming extension failed for: ')
-                            logging.exception('%s (%s)', f.qualifiers['product'][0],
-                                              parse_cluster_number(f.qualifiers['note']))
-                            logging.exception('extension %s', extension)
-                            logging.exception('ori start %s, new start %s', f.location.start.position, start)
-                            logging.exception('ori  end %s, new  end %s', f.location.end.position, end)
-                            raise
+                            # If cluster is at the genome edge - skip extension trimming.
+                            if start == 0:
+                                logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
+                                             parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                            else:
+                                start += extension
+                            if end == len(r):
+                                logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
+                                             parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                            else:
+                                end -= extension
+                            try:
+                                assert start < end
+                            except:
+                                logging.exception('trimming extension failed for: %s (%s), extension %s, ori start %s, new start %s, ori end %s, new end %s',
+                                                  f.qualifiers['product'][0],
+                                                  parse_cluster_number(f.qualifiers['note']),
+                                                  extension, f.location.start.position,
+                                                  start, f.location.end.position,
+                                                  end)
+                                raise
                     clustertrees[s][record_number].add_interval(Interval(start, end))
                     cluster2genes[s][cluster_number] = []
                     all_clusters.append((s, cluster_number))
@@ -600,7 +608,7 @@ def process(inputs, paranoid, args):
         logging.info('\tAssign genes to biosynthetic clusters')
         num_genes = 0
         for r in genbank[s]: # genbank[s] is a list of records
-            record_number = genbank.index(r)
+            record_number = genbank[s].index(r)
             for f in r.features:
                 if f.type == 'CDS':
                     # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
@@ -623,8 +631,9 @@ def process(inputs, paranoid, args):
                         for cluster in cl:
                             cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
                             gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
+                        del gene_name
         print('\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes))
-        del num_genes, gene_name
+        del num_genes
     # Extra verification.
     for s in species:
         for num, cl in cluster2genes[s].iteritems():
@@ -657,7 +666,8 @@ def process(inputs, paranoid, args):
         weight_bins[x/100.0] = 0
     for (c1, c2) in pairs:
         num_pairs += 1
-        weight = calculate_weight(c1, c2)
+        weight = calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one,
+                                  inter_one, numbers2products, mp, gene2clusters, args, inputs)
         logging.debug('\tassigned weight %s to %s and %s', round(weight, 2), c1, c2)
         weight_bins[bin_key(weight)] += 1
         if weight >= args.threshold:
@@ -872,7 +882,7 @@ def preprocess_input_files(inputs, args):
         else:
             output_folder = join(args.project, primary_id)
             as2_options = ['run_antismash', '--outputfolder', output_folder]
-            # Remove time-consuming/unnecessary options: smcogs, clusterblast, subclusterblast.
+            # Removed time-consuming/unnecessary options: smcogs, clusterblast, subclusterblast.
             as2_options.extend(['--cpus', '1', '--full-blast', '--full-hmmer'])
             as2_options.extend(['--verbose', '--all-orfs'])
             as2_options.extend(['--input-type', 'nucl'])
@@ -891,8 +901,9 @@ def preprocess_input_files(inputs, args):
             logging.debug('as2file (target): %s', as2file)
             antismash2_file = join(output_folder, primary_id + '.final.gbk')
             logging.debug('antismash2 file (source): %s', antismash2_file)
-            rename(antismash2_file, as2file )
+            rename(antismash2_file, as2file)
             rmtree(output_folder)
+            inputs[primary_id]['as2file'] = as2file
             del output_folder, out
 
         faafile = join(args.project, primary_id + '.faa')
