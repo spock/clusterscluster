@@ -882,11 +882,13 @@ def preprocess_input_files(inputs, args):
         else:
             output_folder = join(args.project, primary_id)
             as2_options = ['run_antismash', '--outputfolder', output_folder]
-            # Removed time-consuming/unnecessary options: smcogs, clusterblast, subclusterblast.
-            as2_options.extend(['--cpus', '1', '--full-blast', '--full-hmmer'])
-            as2_options.extend(['--verbose', '--all-orfs'])
+            # Removed time-consuming/unnecessary options: smcogs, clusterblast,
+            # subclusterblast.
+            # Removed unnecessary options: --full-blast, --full-hmmer.
+            as2_options.extend(['--cpus', '1', '--verbose', '--all-orfs'])
             as2_options.extend(['--input-type', 'nucl'])
             if args.no_extensions:
+                logging.warning("using --no-extensions option; cluster.py DOES NOT check if this option is supported!")
                 as2_options.append('--no-extensions')
             as2_options.append(fnafile)
             logging.info('Running antismash2: %s', ' '.join(as2_options))
@@ -1131,7 +1133,11 @@ def main():
     # "Catalog" all input files.
     inputs = {} # Map genome ID to other properties.
 
+    if len(args.paths) == 1:
+        logging.warning("Single input file specified, program will exit after preprocessing.")
     preprocess_input_files(inputs, args)
+    if len(args.paths) == 1: # single input - exit
+        sys.exit(3)
     inparanoidir, faafiles = prepare_inparanoid(inputs, args)
     run_inparanoid(inparanoidir, faafiles)
 
