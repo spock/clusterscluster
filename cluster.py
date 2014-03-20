@@ -138,9 +138,8 @@ def get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
         logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
         for xeno_gene in mp.ortho2genes[orthoclust]:
             # Extract LOCUS from gene name, find species from it.
-            # FIXME: rsplit('.') is not reliable!
             #xeno_species = inputs[xeno_gene.rsplit('.')[-1]]
-            xeno_species = xeno_gene.rsplit('.')[-1]
+            xeno_species = xeno_gene.rsplit(':')[-1]
             # Check if xeno_gene belongs to any biosynthetic clusters.
             if xeno_gene in gene2clusters[xeno_species]:
                 bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
