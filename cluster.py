@@ -422,79 +422,26 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
         # Once per species, show a table of intra-species cluster links, with weights;
         # looks just like the above weights table, but now only clusters from single
         # species are used.
-#
-# /Set of functions used by process()
-#
 
-def process(inputs, paranoid, args):
+
+def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters, numbers2products, coords2numbers, clustersizes, all_clusters):
     '''
-    Analyze quickparanoid results. 'args' contains:
-    "paranoid" is the path to quickparanoid output file.
-    "paths" is a list of paths to genbank files we want to compare.
-    "threshold" is a biocluster-biocluster link weight threshold.
-    "prefix" is prepended to all output files.
-    "trim", if True, causes antismash2 clusters to lose non-core extensions at
-    both ends of the cluster (these are hard-coded in antismash2). Note that for composite-type
-    clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
-    for the backteriocin-t1pks cluster).
-    "skipp" means "skip putative clusters", if set.
-    "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
-    "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
-    "use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
-    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).
+    All of: cluster2genes, gene2clusters, numbers2products, coords2numbers,
+            clustersizes, all_clusters
+    will be updated upon execution of this function.
     '''
-    # FIXME: re-think this entire function.
-    # TODO: modularize?...
-    # TODO: replace species with either inputs.keys() or faafiles.
-    # TODO: replace paths with args.paths, or inputs?
-    # TODO: replace 'trim' support with no-extensions support (?).
-    # TODO: deprecate skipp? (can be filtered out at the analysis step)
-    # TODO: add memory cleanup everywhere :)
-    # TODO: switch from record.name to record.id.
-
-    mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
-
-    # Declare important variables.
-    # List of recognized species IDs.
-    species = inputs.keys()
-    # List of all clusters from all species.
-    all_clusters = []
-    # Map of per-species cluster numbers to their products
-    numbers2products = {}
-    # Dict of per-species GenBank records, e.g. genbank[id] = [rec1, rec2]
-    # FIXME: all are too much to keep in memory, try to keep only 2 at a time,
-    # by parsing these on demand.
+    # Dict of per-species GenBank records, e.g. genbank[id] = [rec1, rec2, ...]
     genbank = {}
-    # Dict of per-species interval trees of clusters.
+    # Dict of per-species interval trees of clusters, one per record.
     clustertrees = {}
-    # Per-species mapping of cluster coordinates tuple to their numbers.
-    coords2numbers = {}
-    # 2-level nested dict of cluster pairs link weights,
-    # e.g. cluster_weights['A'] = {'B': 0.95, ...}
-    cluster_weights = {}
-    # Same as above, but without duplicate links to other species.
-    weights_clean = {}
-    # Same as cluster_weights, but only for intra-species links.
-    weights_intra = {}
-    # Mapping of record.id from GenBank files (LOCUS) to species.
-    # DEPRECATED: use inputs[primary_id]['species']
-    #locus2species = {}
-    # Dict of per-species dicts of cluster-to-gene relations.
-    # Each cluster dict uses a key = (species, number).
-    cluster2genes = {}
-    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
-    gene2clusters = {}
-    # Two lists of 2-tuples with weight > threshold links between clusters.
-    intra_one = []
-    inter_one = []
-    # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
-    clustersizes = {}
 
-    logging.info('Reading all genbank files in parallel.')
-    task_queue = Queue() # paths to antismashed genbank files, or 'STOP'.
+    species = inputs.keys()
+    species_count = len(species)
+    logging.info('Parsing genbank files in parallel.')
+    task_queue = Queue() # record.id + path to antismashed genbank, or 'STOP'.
     done_queue = Queue()
 
-    # Simple helper.
+    # Parallel worker.
     def worker(tasks, done):
         try:
             (k, gb) = tasks.get() # By default, there is no timeout.
@@ -505,11 +452,11 @@ def process(inputs, paranoid, args):
         if gb == 'STOP':
             logging.debug("STOP found, exiting.")
             return
-        # TODO: do not put the entire genbank into memory (index? index_db?).
+        # FIXME: add all of parsing in here.
         done.put((k, list(SeqIO.parse(gb, "genbank", generic_dna))))
 
     logging.info("Starting %s GenBank parse workers.", cpu_count())
-    for _ in range(min(cpu_count(), len(species))):
+    for _ in range(min(cpu_count(), species_count)):
         # TODO: do I need to join() these processes later?
         Process(target=worker, args=(task_queue, done_queue)).start()
     del _
@@ -522,7 +469,7 @@ def process(inputs, paranoid, args):
 
     logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
     for _ in range(cpu_count()):
-        task_queue.put('STOP')
+        task_queue.put(0, 'STOP')
     del _
 
     for _ in range(len(species)):
@@ -535,8 +482,8 @@ def process(inputs, paranoid, args):
     done_queue.close()
 
 
-    # TODO: either take this out into a function, or merge with genbank
-    # parsing, to remove genbanks from memory when done.
+    # FIXME: merge into the genbank parsing worker,
+    # to remove genbanks from memory when done.
     print('Parsing clusters and assigning genes to them:')
     logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
     rulesdict = hmm_detection.create_rules_dict()
@@ -641,17 +588,81 @@ def process(inputs, paranoid, args):
             except:
                 print('cluster %s of %s has 0 genes' % (num, s))
                 raise
-    print('\tadded %s clusters from %s species' % (len(all_clusters), len(species)))
+    print('\tadded %s clusters from %s species' % (len(all_clusters), species_count))
     # Sort by species.lower() to ensure stable order of cluster pairs.
     # FIXME: to implement proper sorting, may need to use faafiles instead of r.id as s/species.
     all_clusters.sort(key = lambda s: s[0].lower())
 
-
     logging.debug('Freeing memory.')
-    # FIXME: genbank appears to only be used for assigning genes to clusters;
-    # looks possible to do that while parsing genbank.
     del genbank, clustertrees
 
+#
+# /Set of functions used by process()
+#
+
+def process(inputs, paranoid, args):
+    '''
+    Analyze quickparanoid results. 'args' contains:
+    "paranoid" is the path to quickparanoid output file.
+    "paths" is a list of paths to genbank files we want to compare.
+    "threshold" is a biocluster-biocluster link weight threshold.
+    "prefix" is prepended to all output files.
+    "trim", if True, causes antismash2 clusters to lose non-core extensions at
+    both ends of the cluster (these are hard-coded in antismash2). Note that for composite-type
+    clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
+    for the backteriocin-t1pks cluster).
+    "skipp" means "skip putative clusters", if set.
+    "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
+    "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
+    "use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
+    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).
+    '''
+    # FIXME: re-think this entire function.
+    # TODO: modularize?...
+    # TODO: replace species with either inputs.keys() or faafiles.
+    # TODO: replace paths with args.paths, or inputs?
+    # TODO: replace 'trim' support with no-extensions support (?).
+    # TODO: deprecate skipp? (can be filtered out at the analysis step)
+    # TODO: add memory cleanup everywhere :)
+    # TODO: switch from record.name to record.id.
+
+    mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
+
+    # Declare important variables.
+    # List of recognized species IDs.
+    species = inputs.keys()
+    # List of all clusters from all species.
+    all_clusters = []
+    # Map of per-species cluster numbers to their products
+    numbers2products = {}
+    # Per-species mapping of cluster coordinates tuple to their numbers.
+    coords2numbers = {}
+    # 2-level nested dict of cluster pairs link weights,
+    # e.g. cluster_weights['A'] = {'B': 0.95, ...}
+    cluster_weights = {}
+    # Same as above, but without duplicate links to other species.
+    weights_clean = {}
+    # Same as cluster_weights, but only for intra-species links.
+    weights_intra = {}
+    # Mapping of record.id from GenBank files (LOCUS) to species.
+    # DEPRECATED: use inputs[primary_id]['species']
+    #locus2species = {}
+    # Dict of per-species dicts of cluster-to-gene relations.
+    # Each cluster dict uses a key = (species, number).
+    cluster2genes = {}
+    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
+    gene2clusters = {}
+    # Two lists of 2-tuples with weight > threshold links between clusters.
+    intra_one = []
+    inter_one = []
+    # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
+    clustersizes = {}
+
+    # Read genbank files, assign genes to clusters, clusters to genes, and
+    # fill other useful maps and lists.
+    parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
+                                 numbers2products, coords2numbers, clustersizes,
+                                 all_clusters)
 
     print('Constructing gene-based cluster links.')
     pairs = combinations(all_clusters, 2)
