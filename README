@@ -12,8 +12,9 @@ For a relatively detailed example, please see <article URL>
 
 Dependencies
 ============
-antismash2 (*modified*, see below)
+antismash2 (possibly *modified*, see below)
 Custom-edited InParanoid 4.1 (included)
+Custom-edited quickparanoid (included)
 
 Installation
 ============

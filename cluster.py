@@ -316,6 +316,111 @@ def cumulative_growth(species, cluster2genes, reverse = True):
     for item in table:
         print('%s\t%s\t%s\t%s' % item)
 
+def clusters_of_clusters(species, weights_clean, numbers2products, args):
+    'not used at the moment, possibly not fully functional - not reviewed'
+    print('Grouping into clusters with 11, 10, ... links.')
+    # Dict grouping weights_clean by the number of links inside.
+    by_count = {}
+    # Init.
+    for i in range(1, len(species) + 1):
+        by_count[i] = {}
+    for c1, nested_dict in weights_clean.iteritems():
+        # +1 for the c1, which is not counted.
+        group_len = len(nested_dict) + 1
+        try:
+            assert group_len <= len(species)
+        except:
+            logging.exception('group_len %s', group_len)
+            logging.exception('c1 %s', c1)
+            logging.exception('nested %s', nested_dict)
+            raise
+        by_count[group_len][c1] = nested_dict
+    print('Summary:')
+    for i in range(len(species), 0, -1):
+        print('\t%s: %s groups' % (i, len(by_count[i])))
+
+    # All output tables have headers, row names, and tab-separated columns.
+
+    # Using cluster products, for each group of same-links-count clusters output tables for them:
+    # Clusters with 11 links (a total of NUMBER):
+    # sp1 sp2 sp3 ...
+    # cl1 cl2 cl3 ...
+    # ...
+    for i in range(len(species), 0, -1):
+        if len(by_count[i]) == 0:
+            continue
+        fname = args.prefix + '_' + str(i) + '_links.csv'
+        print('Groups of size', i, '(%s)' % len(by_count[i]),
+              'will be written to file', fname)
+        # From here on output goes to both stdout and the file.
+        #tee = Tee(fname, 'a')
+        tee = open(fname, 'w')
+        print_species_header(species, tee)
+        # Print data rows.
+        group_s2c = {}
+        for c1, nested in by_count[i].iteritems():
+            # Map species of the current group to cluster numbers.
+            s2c = {}
+            s2c[c1[0]] = c1[1]
+            for (s, n) in nested.iterkeys():
+                s2c[s] = n
+            first = True
+            for s in species:
+                if first:
+                    first = False
+                else:
+                    tee.write('\t')
+                if s in s2c:
+                    tee.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
+            tee.write('\n')
+            group_s2c[c1] = s2c
+        # After each such table, output a diagonal matrix of link weights between all
+        # possible cluster pairs in each of the groups above.
+        # Cluster link weights:
+        #    cl1 cl2 cl3 cl4
+        # cl1 -  0.5 0.6 0.9
+        # cl2     -  0.7 0.5
+        # cl3         -  0.8
+        # cl4             -
+        tee.write('\nCluster pairs link weights\n')
+        for c1, nested in by_count[i].iteritems():
+            print_species_header(species, tee)
+            print_cluster_numbers_row(group_s2c[c1], species, tee)
+            # Keep track of numbers already shown in the 1st column.
+            printed = []
+            for s_r in species[:]:
+                printed.append(s_r)
+                if s_r not in group_s2c[c1]:
+                    # Do not print entirely empty rows.
+                    continue
+                # Print cluster number in the 1st column.
+                tee.write(str(group_s2c[c1][s_r]))
+                first = True
+                for s_c in species[:]:
+                    if first:
+                        # Skip firstmost record entirely.
+                        first = False
+                        continue
+                    tee.write('\t')
+                    if s_c in printed:
+                        # Don't print the lower diagonal of values.
+                        continue
+                    # Find an existing link.
+                    row_key = (s_r, group_s2c[c1][s_r])
+                    col_key = (s_c, group_s2c[c1][s_c])
+                    if row_key in by_count[i]:
+                        tee.write(round(by_count[i][row_key][col_key], 2))
+                    elif col_key in by_count[i]:
+                        tee.write(round(by_count[i][col_key][row_key], 2))
+                    else:
+                        print('Neither', row_key, 'nor', col_key,
+                              'found in cluster_weights.')
+                tee.write('\n')
+        tee.close()
+#        del tee
+        # Once per species, show a table of intra-species cluster links, with weights;
+        # looks just like the above weights table, but now only clusters from single
+        # species are used.
 #
 # /Set of functions used by process()
 #
@@ -349,19 +454,17 @@ def process(inputs, paranoid, args):
     mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
 
     # Declare important variables.
-    # List of recognized species.
-    # TODO: can replace with inputs.keys()
-    # TODO: replace all uses of 'species' as an identifier with record.id.
-    species = []
+    # List of recognized species IDs.
+    species = inputs.keys()
     # List of all clusters from all species.
     all_clusters = []
     # Map of per-species cluster numbers to their products
     numbers2products = {}
-    # Dict of per-species GenBank records.
-    # FIXME: all are too much to keep in memory, try to keep only 2 at a time.
+    # Dict of per-species GenBank records, e.g. genbank[id] = [rec1, rec2]
+    # FIXME: all are too much to keep in memory, try to keep only 2 at a time,
+    # by parsing these on demand.
     genbank = {}
     # Dict of per-species interval trees of clusters.
-    # FIXME: all are too much to keep in memory, try to keep only 2 at a time.
     clustertrees = {}
     # Per-species mapping of cluster coordinates tuple to their numbers.
     coords2numbers = {}
@@ -373,7 +476,8 @@ def process(inputs, paranoid, args):
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
     # Mapping of record.id from GenBank files (LOCUS) to species.
-    locus2species = {}
+    # DEPRECATED: use inputs[primary_id]['species']
+    #locus2species = {}
     # Dict of per-species dicts of cluster-to-gene relations.
     # Each cluster dict uses a key = (species, number).
     cluster2genes = {}
@@ -385,122 +489,142 @@ def process(inputs, paranoid, args):
     # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
     clustersizes = {}
 
-
-    # FIXME: this parallel implementation is not reliable, modify to
-    # use some "stop" signals (by the number of CPUs/cores).
     logging.info('Reading all genbank files in parallel.')
-    task_queue = Queue()
+    task_queue = Queue() # paths to antismashed genbank files, or 'STOP'.
     done_queue = Queue()
 
-    # Simple helper
+    # Simple helper.
     def worker(tasks, done):
-        while not tasks.empty():
-            try:
-                # _nowait: otherwise race conditions emerge, when tasks.empty() evaluates
-                # to False, but then some other worker grabs the work and leaves tasks empty.
-                (s, gb) = tasks.get_nowait()
-            except: # Queue.Empty
-                return
-            # FIXME: need to support multi-locus genbank files.
-            done.put((s, SeqIO.read(gb, "genbank")))
+        try:
+            (k, gb) = tasks.get() # By default, there is no timeout.
+        except: # Queue.Empty
+            logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
+            raise
+        # Exit if 'STOP' element is found.
+        if gb == 'STOP':
+            logging.debug("STOP found, exiting.")
+            return
+        # TODO: do not put the entire genbank into memory (index? index_db?).
+        done.put((k, list(SeqIO.parse(gb, "genbank", generic_dna))))
 
-    # Detect which species it is by the first 5 characters.
-    # FIXME: needs a better solution.
-    for gb in args.paths:
-        for s in species:
-            if s[0:5] == gb[0:5]:
-                logging.info('\t%s corresponds to species %s', gb, s)
-                break
-        task_queue.put((s, gb))
-    for i in range(cpu_count()):
+    logging.info("Starting %s GenBank parse workers.", cpu_count())
+    for _ in range(cpu_count()):
+        # TODO: do I need to join() these processes later?
         Process(target=worker, args=(task_queue, done_queue)).start()
-    for i in range(len(args.paths)):
-        s, rec = done_queue.get()
-        genbank[s] = rec
-        locus2species[genbank[s].name] = s
+    del _
+
+    logging.debug("Putting ID-path tuples into task_queue")
+    for k, v in inputs.iteritems():
+        # submit record.id and /path/to/genbank
+        task_queue.put((k, v['infile']))
+    del k, v
+
+    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+    for _ in range(cpu_count()):
+        task_queue.put('STOP')
+    del _
+
+    for _ in range(len(species)):
+        k, rec_list = done_queue.get()
+        genbank[k] = rec_list
+    del _, rec_list
+
     print('\ttotal records parsed: %s' % len(genbank))
     task_queue.close()
     done_queue.close()
 
 
+    # TODO: either take this out into a function, or merge with genbank
+    # parsing, to remove genbanks from memory when done.
     print('Parsing clusters and assigning genes to them:')
     logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
     rulesdict = hmm_detection.create_rules_dict()
     if args.trim:
         logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
     for s in species:
-        logging.debug('\tprocessing %s', s)
-        clustertrees[s] = IntervalTree()
+        logging.debug('\tprocessing %s (%s)', s, inputs[s]['species'])
+        clustertrees[s] = {}
         cluster2genes[s] = {}
         numbers2products[s] = {}
         coords2numbers[s] = {}
         gene2clusters[s] = {}
         # Populate clusters tree and dict with (start, end) as keys.
-        for f in genbank[s].features:
-            if f.type == 'cluster':
-                cluster_number = parse_cluster_number(f.qualifiers['note'])
-                start = int(f.location.start.position)
-                end = int(f.location.end.position)
-                if args.skipp and f.qualifiers['product'][0] == 'putative':
-                    logging.debug('\tskipping putative cluster #%s at (%s, %s)',
-                                  cluster_number, start, end)
-                    continue
-                # Putative clusters have neither extensions nor rules for them.
-                if args.trim and f.qualifiers['product'][0] != 'putative':
-                    # Use cluster type to get extension size, including composite types.
-                    extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
-                    # If cluster is at the genome edge - skip extension trimming.
-                    if start == 0:
-                        logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
-                                     parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
-                    else:
-                        start += extension
-                    if end == len(genbank[s]):
-                        logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
-                                     parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
-                    else:
-                        end -= extension
-                    try:
-                        assert start < end
-                    except:
-                        logging.exception('trimming extension failed for: ')
-                        logging.exception('%s (%s)', f.qualifiers['product'][0],
-                                          parse_cluster_number(f.qualifiers['note']))
-                        logging.exception('extension %s', extension)
-                        logging.exception('ori start %s, new start %s', f.location.start.position, start)
-                        logging.exception('ori  end %s, new  end %s', f.location.end.position, end)
-                        raise
-                clustertrees[s].add_interval(Interval(start, end))
-                cluster2genes[s][cluster_number] = []
-                all_clusters.append((s, cluster_number))
-                numbers2products[s][cluster_number] = f.qualifiers['product'][0]
-                coords2numbers[s][(start, end)] = cluster_number
-                clustersizes[(s, cluster_number)] = end - start
-                logging.info('''\t('%s', %s): %s [%s, %s], %s bp long''', s, cluster_number,
-                             f.qualifiers['product'][0], start, end, end-start)
-        logging.info('\tNow assigning genes to biosynthetic clusters')
+        for r in genbank[s]: # genbank[s] is a list of records
+            record_number = genbank.index(r)
+            clustertrees[s][record_number] = IntervalTree()
+            for f in r.features:
+                if f.type == 'cluster':
+                    cluster_number = parse_cluster_number(f.qualifiers['note'])
+                    start = int(f.location.start.position)
+                    end = int(f.location.end.position)
+                    if args.skipp and f.qualifiers['product'][0] == 'putative':
+                        logging.debug('\tskipping putative cluster #%s at (%s, %s)',
+                                      cluster_number, start, end)
+                        continue
+                    # Putative clusters have neither extensions nor rules for them.
+                    if args.trim and f.qualifiers['product'][0] != 'putative':
+                        # Use cluster type to get extension size, including composite types.
+                        extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0], rulesdict)
+                        # If cluster is at the genome edge - skip extension trimming.
+                        if start == 0:
+                            logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
+                                         parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                        else:
+                            start += extension
+                        if end == len(r):
+                            logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
+                                         parse_cluster_number(f.qualifiers['note']), f.qualifiers['product'][0])
+                        else:
+                            end -= extension
+                        try:
+                            assert start < end
+                        except:
+                            logging.exception('trimming extension failed for: ')
+                            logging.exception('%s (%s)', f.qualifiers['product'][0],
+                                              parse_cluster_number(f.qualifiers['note']))
+                            logging.exception('extension %s', extension)
+                            logging.exception('ori start %s, new start %s', f.location.start.position, start)
+                            logging.exception('ori  end %s, new  end %s', f.location.end.position, end)
+                            raise
+                    clustertrees[s][record_number].add_interval(Interval(start, end))
+                    cluster2genes[s][cluster_number] = []
+                    all_clusters.append((s, cluster_number))
+                    numbers2products[s][cluster_number] = f.qualifiers['product'][0]
+                    # Start/end coords theoretically can collide between
+                    # multiple loci of the same genome: check for this.
+                    assert (start, end) not in coords2numbers[s]
+                    coords2numbers[s][(start, end)] = cluster_number
+                    clustersizes[(s, cluster_number)] = end - start
+                    logging.info('''\t('%s', %s): %s [%s, %s], %s bp long''', s, cluster_number,
+                                 f.qualifiers['product'][0], start, end, end-start)
+        logging.info('\tAssign genes to biosynthetic clusters')
         num_genes = 0
-        for f in genbank[s].features:
-            if f.type == 'CDS':
-                # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
-                cl = clustertrees[s].find(int(f.location.start.position), int(f.location.end.position))
-                if len(cl) > 0:
-                    # Determine which qualifier type to use for gene name.
-                    if 'locus_tag' in f.qualifiers:
-                        qualifier = 'locus_tag'
-                    elif 'gene' in f.qualifiers:
-                        qualifier = 'gene'
-                    gene_name = f.qualifiers[qualifier][0] + '.' + genbank[s].name
-                    # One gene may belong to more than one cluster.
-                    logging.debug('\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)',
-                                  f.location.start.position, f.location.end.position,
-                                  len(cl), cl[0].start, cl[0].end)
-                    num_genes += 1
-                    gene2clusters[s][gene_name] = []
-                    for cluster in cl:
-                        cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
-                        gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
+        for r in genbank[s]: # genbank[s] is a list of records
+            record_number = genbank.index(r)
+            for f in r.features:
+                if f.type == 'CDS':
+                    # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
+                    cl = clustertrees[s][record_number].find(int(f.location.start.position), int(f.location.end.position))
+                    if len(cl) > 0:
+                        # Determine which qualifier type to use for gene name.
+                        if 'locus_tag' in f.qualifiers:
+                            qualifier = 'locus_tag'
+                        elif 'gene' in f.qualifiers:
+                            qualifier = 'gene'
+                        gene_name = f.qualifiers[qualifier][0] + '.' + s
+                        # Check for gene_name overlaps between loci.
+                        assert gene_name not in gene2clusters[s]
+                        # One gene may belong to more than one cluster.
+                        logging.debug('\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)',
+                                      f.location.start.position, f.location.end.position,
+                                      len(cl), cl[0].start, cl[0].end)
+                        num_genes += 1
+                        gene2clusters[s][gene_name] = []
+                        for cluster in cl:
+                            cluster2genes[s][coords2numbers[s][(cluster.start, cluster.end)]].append(gene_name)
+                            gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
         print('\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes))
+        del num_genes, gene_name
     # Extra verification.
     for s in species:
         for num, cl in cluster2genes[s].iteritems():
@@ -511,12 +635,14 @@ def process(inputs, paranoid, args):
                 raise
     print('\tadded %s clusters from %s species' % (len(all_clusters), len(species)))
     # Sort by species.lower() to ensure stable order of cluster pairs.
+    # FIXME: to implement proper sorting, may need to use faafiles instead of r.id as s/species.
     all_clusters.sort(key = lambda s: s[0].lower())
 
 
     logging.debug('Freeing memory.')
-    del genbank
-    del clustertrees
+    # FIXME: genbank appears to only be used for assigning genes to clusters;
+    # looks possible to do that while parsing genbank.
+    del genbank, clustertrees
 
 
     print('Constructing gene-based cluster links.')
@@ -615,113 +741,6 @@ def process(inputs, paranoid, args):
     print('\t%s unique intra-species links' % num_pairs_intra)
     print('\t%s unique inter-species links' % num_pairs)
     del skip_list
-
-
-    def clusters_of_clusters():
-        'not used at the moment, possibly not fully functional - not reviewed'
-        print('Grouping into clusters with 11, 10, ... links.')
-        # Dict grouping weights_clean by the number of links inside.
-        by_count = {}
-        # Init.
-        for i in range(1, len(species) + 1):
-            by_count[i] = {}
-        for c1, nested_dict in weights_clean.iteritems():
-            # +1 for the c1, which is not counted.
-            group_len = len(nested_dict) + 1
-            try:
-                assert group_len <= len(species)
-            except:
-                logging.exception('group_len %s', group_len)
-                logging.exception('c1 %s', c1)
-                logging.exception('nested %s', nested_dict)
-                raise
-            by_count[group_len][c1] = nested_dict
-        print('Summary:')
-        for i in range(len(species), 0, -1):
-            print('\t%s: %s groups' % (i, len(by_count[i])))
-
-        # All output tables have headers, row names, and tab-separated columns.
-
-        # Using cluster products, for each group of same-links-count clusters output tables for them:
-        # Clusters with 11 links (a total of NUMBER):
-        # sp1 sp2 sp3 ...
-        # cl1 cl2 cl3 ...
-        # ...
-        for i in range(len(species), 0, -1):
-            if len(by_count[i]) == 0:
-                continue
-            fname = args.prefix + '_' + str(i) + '_links.csv'
-            print('Groups of size', i, '(%s)' % len(by_count[i]),
-                  'will be written to file', fname)
-            # From here on output goes to both stdout and the file.
-            #tee = Tee(fname, 'a')
-            tee = open(fname, 'w')
-            print_species_header(species, tee)
-            # Print data rows.
-            group_s2c = {}
-            for c1, nested in by_count[i].iteritems():
-                # Map species of the current group to cluster numbers.
-                s2c = {}
-                s2c[c1[0]] = c1[1]
-                for (s, n) in nested.iterkeys():
-                    s2c[s] = n
-                first = True
-                for s in species:
-                    if first:
-                        first = False
-                    else:
-                        tee.write('\t')
-                    if s in s2c:
-                        tee.write(numbers2products[s][s2c[s]] + ' (' + str(s2c[s]) + ')')
-                tee.write('\n')
-                group_s2c[c1] = s2c
-            # After each such table, output a diagonal matrix of link weights between all
-            # possible cluster pairs in each of the groups above.
-            # Cluster link weights:
-            #    cl1 cl2 cl3 cl4
-            # cl1 -  0.5 0.6 0.9
-            # cl2     -  0.7 0.5
-            # cl3         -  0.8
-            # cl4             -
-            tee.write('\nCluster pairs link weights\n')
-            for c1, nested in by_count[i].iteritems():
-                print_species_header(species, tee)
-                print_cluster_numbers_row(group_s2c[c1], species, tee)
-                # Keep track of numbers already shown in the 1st column.
-                printed = []
-                for s_r in species[:]:
-                    printed.append(s_r)
-                    if s_r not in group_s2c[c1]:
-                        # Do not print entirely empty rows.
-                        continue
-                    # Print cluster number in the 1st column.
-                    tee.write(str(group_s2c[c1][s_r]))
-                    first = True
-                    for s_c in species[:]:
-                        if first:
-                            # Skip firstmost record entirely.
-                            first = False
-                            continue
-                        tee.write('\t')
-                        if s_c in printed:
-                            # Don't print the lower diagonal of values.
-                            continue
-                        # Find an existing link.
-                        row_key = (s_r, group_s2c[c1][s_r])
-                        col_key = (s_c, group_s2c[c1][s_c])
-                        if row_key in by_count[i]:
-                            tee.write(round(by_count[i][row_key][col_key], 2))
-                        elif col_key in by_count[i]:
-                            tee.write(round(by_count[i][col_key][row_key], 2))
-                        else:
-                            print('Neither', row_key, 'nor', col_key,
-                                  'found in cluster_weights.')
-                    tee.write('\n')
-            tee.close()
-    #        del tee
-            # Once per species, show a table of intra-species cluster links, with weights;
-            # looks just like the above weights table, but now only clusters from single
-            # species are used.
 
     print('All pairs of clusters with link weight over %s (inter-species).', args.threshold)
 #        pprint(inter_one)
