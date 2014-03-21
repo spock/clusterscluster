@@ -1126,6 +1126,15 @@ def main():
     parser.add_argument(dest="paths", help="paths to the GenBank files with genomes to analyze", metavar="path", nargs='*')
     args = parser.parse_args()
 
+    if args.debug:
+        level = logging.DEBUG
+    elif args.quiet:
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+    logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
+
     # Where do we take the paths from?
     if len(args.paths) > 0:
         logging.debug("GenBank paths were provided on the command line, using these.")
@@ -1148,15 +1157,6 @@ def main():
         logging.exception("No GenBank files were given to the program.")
         raise Exception("NoInputError")
     logging.info("Will process %s input files.", len(args.paths))
-
-    if args.debug:
-        level = logging.DEBUG
-    elif args.quiet:
-        level = logging.WARNING
-    else:
-        level = logging.INFO
-    logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
-                        datefmt='%Y-%m-%d %H:%M:%S')
 
     print('Used arguments and options:')
     pprint(vars(args))
