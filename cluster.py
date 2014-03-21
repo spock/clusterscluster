@@ -970,7 +970,7 @@ def run_inparanoid(inparanoidir, faafiles):
     logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
 
     total_genomes = len(faafiles)
-    print("BLASTing %s single genomes.", total_genomes)
+    print("BLASTing %s single genomes." % total_genomes)
     counter = 0
     for _ in faafiles:
         counter += 1
@@ -983,8 +983,8 @@ def run_inparanoid(inparanoidir, faafiles):
                           retcode, err, _)
     del _, blast_single, out, err, retcode, counter, total_genomes
 
-    total_permutations = len(permutations(faafiles, 2))
-    print("BLASTing %s pairwise permutations.", total_permutations)
+    total_permutations = len(list(permutations(faafiles, 2)))
+    print("BLASTing %s pairwise permutations." % total_permutations)
     counter = 0
     for pair in permutations(faafiles, 2):
         counter += 1
@@ -998,8 +998,8 @@ def run_inparanoid(inparanoidir, faafiles):
     del blast_pair, pair, out, err, retcode, counter, total_permutations
 
     # FIXME: make run in parallel.
-    total_combinations = len(combinations(faafiles, 2))
-    print("BLASTing %s pairwise combinations.", total_combinations)
+    total_combinations = len(list(combinations(faafiles, 2)))
+    print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
     counter = 0
     for pair in combinations(faafiles, 2):
         counter += 1
