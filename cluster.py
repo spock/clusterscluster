@@ -441,7 +441,7 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
     def worker(tasks, done, rulesdict):
         try:
             # k = record.id, gb = path to antismash2 genbank file
-            (k, gb, rulesdict) = tasks.get() # By default, there is no timeout.
+            (k, gb) = tasks.get() # By default, there is no timeout.
         except: # Queue.Empty
             logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
             raise
@@ -572,18 +572,18 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
     workers = min(cpu_count(), species_count)
     logging.info("Starting %s GenBank parse workers.", workers)
     for _ in range(workers):
-        Process(target=worker, args=(task_queue, done_queue)).start()
+        Process(target=worker, args=(task_queue, done_queue, rulesdict)).start()
     del _
 
     logging.debug("Putting ID-path tuples into task_queue")
     for k, v in inputs.iteritems():
         # submit record.id and /path/to/genbank
-        task_queue.put((k, v['as2file'], rulesdict))
+        task_queue.put((k, v['as2file']))
     del k, v
 
     logging.debug("Adding %s STOP messages to task_queue.", workers)
     for _ in range(workers):
-        task_queue.put(0, 'STOP', {})
+        task_queue.put((0, 'STOP'))
     del _, workers
 
     logging.debug("Reading from the done_queue.")
@@ -779,7 +779,7 @@ def process(inputs, paranoid, args):
     print('\t%s unique inter-species links' % num_pairs)
     del skip_list
 
-    print('All pairs of clusters with link weight over %s (inter-species).', args.threshold)
+    print('All pairs of clusters with link weight over %s (inter-species).' % args.threshold)
 #        pprint(inter_one)
     print('Species,\tNumber,\tType,\tGenes,\tLength,\tSpecies,\tNumber,\tType,\tGenes,\tLength,\tWeight')
     for (cl1, t1, g1, l1, cl2, t2, g2, l2, w) in inter_one:
@@ -1130,7 +1130,7 @@ def main():
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     # FIXME: --trim is broken (on by default, impossible to turn off).
-    parser.add_argument("--trim", dest="trim", action="store_false", default=True, help="trim away antismash2 cluster extensions [default: %(default)s]")
+    parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--scale", dest="scale", action="store_true", default=False, help="scale link weight down by a factor of min(size1, size2)/max(size1, size2) [default: %(default)s]")
@@ -1140,7 +1140,7 @@ def main():
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument("--project", default='cluster_project', help="put all the project files into this directory [default: %(default)s]")
     parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
-    parser.add_argument('--no-extensions', action = 'store_true', default = False, help='pass --no-extensions option to the modified antismash2 (see README for detais) [default: %(default)s]')
+    parser.add_argument('--no-extensions', action = 'store_true', default = False, help='pass --no-extensions option to the modified antismash2 (see README for details) [default: %(default)s]')
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
     parser.add_argument('--from-file', action = 'store', help='read paths to GenBank files (one per line) from the provided file')
@@ -1210,7 +1210,7 @@ def main():
     del inparanoidir, faafiles
 
     # Process result_path.
-#    process(inputs, result_path, args)
+    process(inputs, result_path, args)
     return 0
 
 
