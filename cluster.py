@@ -1138,7 +1138,7 @@ def main():
     # Where do we take the paths from?
     if len(args.paths) > 0:
         logging.debug("GenBank paths were provided on the command line, using these.")
-    if args.from_file != '':
+    if args.from_file != None:
         logging.debug("GenBank paths were provided in '%s', using these.",
                       args.from_file)
         if exists(args.from_file):
