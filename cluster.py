@@ -899,7 +899,7 @@ def preprocess_input_files(inputs, args):
             # subclusterblast.
             # Removed unnecessary options: --full-blast, --full-hmmer.
             # TODO: when this part is properly parallelized, set --cpus to 1.
-            as2_options.extend(['--cpus', cpu_count(), '--verbose', '--all-orfs'])
+            as2_options.extend(['--cpus', str(cpu_count()), '--verbose', '--all-orfs'])
             as2_options.extend(['--input-type', 'nucl'])
             if args.no_extensions:
                 logging.warning("using --no-extensions option; cluster.py DOES NOT check if this option is supported!")
