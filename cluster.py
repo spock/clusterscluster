@@ -432,9 +432,6 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
             clustersizes, all_clusters
     will be updated upon execution of this function.
     '''
-    # Dict of per-species interval trees of clusters, one per record.
-    clustertrees = {}
-
     species = inputs.keys()
     species_count = len(species)
     rulesdict = hmm_detection.create_rules_dict()
@@ -454,6 +451,8 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
         if gb == 'STOP':
             logging.debug("STOP found, exiting.")
             return
+        # Dict of per-species interval trees of clusters, one per record.
+        clustertrees = {}
         # FIXME: merge here genbank parsing.
         genbank = list(SeqIO.parse(gb, "genbank", generic_dna))
         # TODO: all the parallel output will get mangled, consider suppressing/removing.
@@ -551,8 +550,9 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
                             gene2clusters[s][gene_name].append((s, coords2numbers[s][(cluster.start, cluster.end)]))
                         del gene_name
         print('\t%s: %s clusters populated with %s genes' % (s, len(cluster2genes[s]), num_genes))
-        del num_genes
-        done.put((k, something?))
+        del num_genes, clustertrees
+        # FIXME:
+#        done.put((k, something?))
 
     logging.info("Starting %s GenBank parse workers.", cpu_count())
     for _ in range(min(cpu_count(), species_count)):
@@ -594,7 +594,7 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
     all_clusters.sort(key = lambda s: s[0].lower())
 
     logging.debug('Freeing memory.')
-    del genbank, clustertrees
+    del genbank
 
 #
 # /Set of functions used by process()
@@ -1155,7 +1155,7 @@ def main():
     del inparanoidir, faafiles
 
     # Process result_path.
-    process(inputs, result_path, args)
+#    process(inputs, result_path, args)
     return 0
 
 
