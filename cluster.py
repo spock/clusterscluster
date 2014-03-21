@@ -969,35 +969,48 @@ def run_inparanoid(inparanoidir, faafiles):
     chdir(inparanoidir)
     logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
 
+    total_genomes = len(faafiles)
+    print("BLASTing %s single genomes.", total_genomes)
+    counter = 0
     for _ in faafiles:
+        counter += 1
         blast_single = ['inparanoid.pl', '--blast-only', _]
-        logging.info('Running blast on a single genome: %s',
-                     ' '.join(blast_single))
+        logging.info('Running blast %s / %s on a single genome: %s', counter,
+                     total_genomes, ' '.join(blast_single))
         out, err, retcode = utils.execute(blast_single)
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while blasting %r',
                           retcode, err, _)
-    del _, blast_single, out, err, retcode
+    del _, blast_single, out, err, retcode, counter, total_genomes
 
+    total_permutations = len(permutations(faafiles, 2))
+    print("BLASTing %s pairwise permutations.", total_permutations)
+    counter = 0
     for pair in permutations(faafiles, 2):
+        counter += 1
         blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
-        logging.info('Running blast on genome pair: %s',
-                     ' '.join(blast_pair))
+        logging.info('Running blast %s / %s on genome pair: %s', counter,
+                     total_permutations, ' '.join(blast_pair))
         out, err, retcode = utils.execute(blast_pair)
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while blasting %r and %r',
                           retcode, err, pair[0], pair[1])
-    del blast_pair, pair, out, err, retcode
+    del blast_pair, pair, out, err, retcode, counter, total_permutations
 
     # FIXME: make run in parallel.
+    total_combinations = len(combinations(faafiles, 2))
+    print("BLASTing %s pairwise combinations.", total_combinations)
+    counter = 0
     for pair in combinations(faafiles, 2):
+        counter += 1
         inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
-        logging.info('Running inparanoid analysis: %s', ' '.join(inparanoid_pair))
+        logging.info('Running inparanoid analysis %s / %s: %s', counter,
+                     total_combinations, ' '.join(inparanoid_pair))
         out, err, retcode = utils.execute(inparanoid_pair)
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
                           retcode, err, pair[0], pair[1])
-    del inparanoid_pair, pair, out, err, retcode
+    del inparanoid_pair, pair, out, err, retcode, counter, total_combinations
 
     # CD back to the initial directory.
     chdir(curr_path)
