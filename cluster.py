@@ -1134,7 +1134,9 @@ def main():
                       args.from_file)
         if exists(args.from_file):
             with open(args.from_file) as from_handle:
-                args.paths.extend(from_handle.readlines())
+                for _ in from_handle:
+                    args.paths.append(_.strip())
+                del _
         else:
             logging.exception("File %s does not exist.", args.from_file)
             raise Exception("FileDoesNotExistError")
