@@ -255,8 +255,8 @@ def get_unique_clusters(s, cluster2genes, weights_clean, allowed_species = False
     return len(cluster2genes[s]) - non_unique
 
 
-def graph_unique_change_when_adding(species, cluster2genes, reverse = True):
-    print('Graph of the change of unique clusters fraction with each new added genome.')
+def graph_unique_change_when_adding(species, cluster2genes, weights_clean, reverse = True):
+    print("Graph of the change of unique clusters' fraction with each new added genome.")
     if not reverse:
         print('(reversed: from genomes with less clusters to genomes with more)')
     # List of tuples (number_of_clusters, species), for sorting.
@@ -275,14 +275,14 @@ def graph_unique_change_when_adding(species, cluster2genes, reverse = True):
             first = False
             ratio = 1.0
         else:
-            unique = get_unique_clusters(s, allowed_species)
+            unique = get_unique_clusters(s, cluster2genes, weights_clean, allowed_species)
             ratio = round(float(unique) / numclust, 2)
         allowed_species.append(s)
         bar = '#' * int(round(height*ratio))
         bar = bar.ljust(height)
         print('%s\t%s\t%s' % (bar, ratio, s))
 
-def cumulative_growth(species, cluster2genes, reverse = True):
+def cumulative_growth(species, cluster2genes, weights_clean, reverse = True):
     '''Shows expected and observed growth of the number of unique clusters
     with each new genome'''
     print('Graph of the ratio of observed/expected total unique clusters.')
@@ -306,7 +306,7 @@ def cumulative_growth(species, cluster2genes, reverse = True):
     print('%s\t%s\t%s' % ('#' * height, 1.0, 'Reference'))
     for (numclust, s) in numclust_species:
         total_expected += len(cluster2genes[s])
-        total_observed += get_unique_clusters(s)
+        total_observed += get_unique_clusters(s, cluster2genes, weights_clean)
         ratio = round(float(total_observed) / total_expected, 2)
         table.append((total_observed, total_expected, round(ratio, 2), s))
         bar = '#' * int(round(height*ratio))
@@ -793,11 +793,11 @@ def process(inputs, paranoid, args):
               (cl1[0], cl1[1], t1, g1, l1, cl2[0], cl2[1], t2, g2, l2, w), end='')
     print()
 
-    graph_unique_change_when_adding()
-#    graph_unique_change_when_adding(False)
+    graph_unique_change_when_adding(species, cluster2genes, weights_clean)
+#    graph_unique_change_when_adding(species, cluster2genes, weights_clean, False)
 
-    cumulative_growth()
-#    cumulative_growth(False)
+    cumulative_growth(species, cluster2genes, weights_clean)
+#    cumulative_growth(species, cluster2genes, weights_clean, False)
 
     # Finally, show a list of all species, stating the number of unique
     # clusters they have.
@@ -806,8 +806,8 @@ def process(inputs, paranoid, args):
     # Draw a reference 100% line.
     print('%s\t%s\t%s\t%s\t%s' % ('Bar'.ljust(height), 'Unique', 'Total', 'Ratio', 'Genome'))
     print('%s\t%s\t%s\t%s\t%s' % ('#' * height, 1.0, 1.0, 1.0, 'Reference'))
-    for s in species:
-        unique = get_unique_clusters(s)
+    for s in inputs.keys():
+        unique = get_unique_clusters(s, cluster2genes, weights_clean)
         total = len(cluster2genes[s])
         ratio = round(unique / float(total), 2)
         bar = '#' * int(round(height*ratio))
