@@ -77,10 +77,10 @@ class MultiParanoid(object):
 
     def gene2species(self, gene):
         '''
-        Given a complex gene ID like SAV_1680.BA000030, return the part after the dot
-        (BA000030 in this example), which is the LOCUS of the gene's genome.
+        Given a complex gene ID like SAV_1680:BA000030, return the part after the
+        colon (BA000030 in this example), which is the LOCUS of the gene's genome.
         '''
-        return gene[gene.find('.')+1:]
+        return gene[gene.find(':')+1:]
 
     def parse(self):
         logging.info('Reading quick/multi-paranoid gene clusters:')
@@ -116,6 +116,6 @@ class MultiParanoid(object):
                 raise
         logging.info('\ttotal lines read: %s', reader.line_num)
         logging.info('\ttotal species encountered: %s', len(self.species))
-        logging.info('\tlist of these species: %s', self.species)
+        logging.info('\tlist of these species: %s', ', '.join(self.species))
         logging.info('\ttotal entries in gene2ortho: %s', len(self.gene2ortho))
         logging.info('\ttotal entries in ortho2genes: %s', len(self.ortho2genes))
