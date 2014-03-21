@@ -1123,7 +1123,7 @@ def main():
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
     parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
     parser.add_argument('--from-file', action = 'store', help='read paths to GenBank files (one per line) from the provided file')
-    parser.add_argument(dest="paths", help="paths to the GenBank files with genomes to analyze", metavar="path", nargs='+')
+    parser.add_argument(dest="paths", help="paths to the GenBank files with genomes to analyze", metavar="path", nargs='*')
     args = parser.parse_args()
 
     # Where do we take the paths from?
