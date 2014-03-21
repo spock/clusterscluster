@@ -885,8 +885,11 @@ def preprocess_input_files(inputs, args):
         inputs[primary_id]['as2file'] = as2file
         antismash2_reused = False
         if args.force and exists(as2file):
-            logging.warning('Reusing existing antismash2 annotation; --no-extensions option will NOT be honored!')
-            logging.warning('Do not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
+            logging.warning('Reusing existing antismash2 annotation.')
+            if not args.antismash_warning_shown:
+                args.antismash_warning_shown = True
+                logging.warning('\t--no-extensions option will NOT be honored!')
+                logging.warning('\tDo not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
             # Re-using any further files is only possible if we do re-use antismash files.
             antismash2_reused = True
         else:
@@ -921,7 +924,7 @@ def preprocess_input_files(inputs, args):
         faafile = join(args.project, primary_id + '.faa')
         inputs[primary_id]['faafile'] = faafile
         if antismash2_reused and args.force and exists(faafile):
-            logging.warning('Reusing existing translations file!')
+            logging.warning('Reusing existing translations file.')
         else:
             extract_translation_from_genbank(as2file, faafile, False)
         del as2file, fnafile, faafile, infile
@@ -1125,6 +1128,10 @@ def main():
     parser.add_argument('--from-file', action = 'store', help='read paths to GenBank files (one per line) from the provided file')
     parser.add_argument(dest="paths", help="paths to the GenBank files with genomes to analyze", metavar="path", nargs='*')
     args = parser.parse_args()
+
+    # Special flag to skip detailed warnings about existing antismash files
+    # after the first is shown.
+    args.antismash_warning_shown = False
 
     if args.debug:
         level = logging.DEBUG
