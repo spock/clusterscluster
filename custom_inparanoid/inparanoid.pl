@@ -1,19 +1,19 @@
 #!/usr/bin/perl
 ###############################################################################
 # InParanoid version 4.1
-# Copyright (C) Erik Sonnhammer, Kristoffer Forslund, Isabella Pekkari, 
+# Copyright (C) Erik Sonnhammer, Kristoffer Forslund, Isabella Pekkari,
 # Ann-Charlotte Berglund, Maido Remm, 2007
 #
-# This program is provided under the terms of a personal license to the recipient and may only 
+# This program is provided under the terms of a personal license to the recipient and may only
 # be used for the recipient's own research at an academic insititution.
 #
 # Distribution of the results of this program must be discussed with the authors.
-# For using this program in a company or for commercial purposes, a commercial license is required. 
+# For using this program in a company or for commercial purposes, a commercial license is required.
 # Contact Erik.Sonnhammer@sbc.su.se in both cases
 #
 # Make sure that Perl XML libraries are installed!
 #
-# NOTE: This script requires blastall (NCBI BLAST) version 2.2.16 or higher, that supports 
+# NOTE: This script requires blastall (NCBI BLAST) version 2.2.16 or higher, that supports
 # compositional score matrix adjustment (-C2 flag).
 
 my $usage =" Usage: inparanoid.pl [--blast-only] <FASTAFILE with sequences of species A> <FASTAFILE with sequences of species B> [FASTAFILE with sequences of species C]
@@ -21,14 +21,14 @@ my $usage =" Usage: inparanoid.pl [--blast-only] <FASTAFILE with sequences of sp
 ";
 
 ###############################################################################
-# The program calculates orthologs between 2 datasets of proteins 
+# The program calculates orthologs between 2 datasets of proteins
 # called A and B. Both datasets should be in multi-fasta file
-# - Additionally, it tries to assign paralogous sequences (in-paralogs) to each 
+# - Additionally, it tries to assign paralogous sequences (in-paralogs) to each
 #   thus forming paralogous clusters. 
 # - Confidence of in-paralogs is calculated in relative scale between 0-100%.
 #   This confidence value is dependent on how far is given sequence from the
 #   seed ortholog of given group
-# - Confidence of groups can be calculated with bootstrapping. This is related 
+# - Confidence of groups can be calculated with bootstrapping. This is related
 #   to score difference between best hit and second best hit.
 # - Optionally it can use a species C as outgroup.
 
@@ -47,7 +47,8 @@ $run_blast = 1;  # Set to 1 if you don't have the 4 BLAST output files        #
 $blast_two_passes = 1;  # Set to 1 to run 2-pass strategy                     #
                  # (strongly recommended, but slower)                         #
 $run_inparanoid = 1;
-$use_bootstrap = 1;# Use bootstrapping to estimate the confidence of orthologs#
+# quickparanoid does not use orthologs cobnfidence, safe to disable.
+$use_bootstrap = 0;# Use bootstrapping to estimate the confidence of orthologs#
                    # Needs additional programs 'seqstat.jar' and 'blast2faa.pl'
 $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
                    # Reject best-best hit if outgroup sequence is MORE        #
@@ -55,7 +56,7 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
                    # (by more than $outgroup_cutoff bits)                     #
 
 # Define location of files and programs:
-# Edited: detect the number of CPUs/cores (will probably work only in bash).
+# Detect the number of CPUs/cores (will probably work only in bash).
 my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`;
 chomp($num_cpus);
 print "Detected $num_cpus CPUs/cores.\n";
@@ -68,6 +69,13 @@ print "Detected $num_cpus CPUs/cores.\n";
 #printf "CPU speed is %s MHz\n", $cpu->speed || 'N/A';
 #printf "There are %d CPUs\n"  , $cpu->count || 1;
 #printf "CPU load: %s\n"       , $cpu->load  || 0;
+
+# To run inparanoid.pl itself in parallel, num_cpus should be limited.
+# Comment out the line below for all-cpus blast.
+$num_cpus = "2";
+
+# Note: outgroup code was not checked for compatibility with running multiple parallel inparanoid processes.
+
 $blastall = "blastall -a $num_cpus";  #Add -aN to use N processors; add -V, -VT to emulate older BLAST.
 $formatdb = "formatdb";
 $seqstat = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/seqstat.jar";
@@ -291,16 +299,32 @@ if ($show_times){
 if ($run_blast && !(-e $blast_outputAA && -e $blast_outputAB && -e $blast_outputBA && -e $blast_outputBB) ) {
     print "Trying to run BLAST now - this may take several hours ... or days in worst case!\n";
     print STDERR "Formatting BLAST databases\n";
-    system ("$formatdb -i $fasta_seq_fileA");
-    system ("$formatdb -i $fasta_seq_fileB") if (@ARGV >= 2);
-    system ("$formatdb -i $fasta_seq_fileC") if ($use_outgroup);
+    # For parallel execution:
+    # - check if database file already exists to avoid overwriting;
+    # - do not clean up database files - leave this to parent process, or add
+    #   a new --cleanup option;
+    # - avoid creating formatdb.log (redirect to either /dev/stdout or /dev/null).
+    if (-e "$fasta_seq_fileA.phr" && -e "$fasta_seq_fileA.pin" && -e "$fasta_seq_fileA.psq") {
+        print "re-using BLASTdb for $fasta_seq_fileA\n";
+    }
+    else {
+        system ("$formatdb -i $fasta_seq_fileA -l /dev/stdout");
+    }
+    if (@ARGV >= 2 && -e "$fasta_seq_fileB.phr" && -e "$fasta_seq_fileB.pin" && -e "$fasta_seq_fileB.psq") {
+        print "re-using BLASTdb for $fasta_seq_fileB\n";
+    }
+    else {
+        system ("$formatdb -i $fasta_seq_fileB -l /dev/stdout");
+    }
+    if ($use_outgroup && -e "$fasta_seq_fileC.phr" && -e "$fasta_seq_fileC.pin" && -e "$fasta_seq_fileC.psq") {
+        print "re-using BLASTdb for $fasta_seq_fileC\n";
+    }
+    else {
+        system ("$formatdb -i $fasta_seq_fileC -l /dev/stdout");
+    }
     print STDERR "Done formatting\nStarting BLAST searches...\n";
 
-# Run blast only if the files do not already exist is not default.
-# NOTE: you should have done this beforehand, because you probably
-# want two-pass blasting anyway which is not implemented here
-# this is also not adapted to use specific compositional adjustment settings
-# and might not use the proper blast parser...
+# Run blast only if the files do not already exist is now the default.
 
     # Edited to allow re-using BLAST results.
     if (-e $blast_outputAA) {
@@ -428,7 +452,6 @@ if ($run_inparanoid) {
 	$score = $Fld[2];
 	
 	next if (!overlap_test(@Fld));
-	
 	next if ($score < $score_cutoff);
 	
 	if(!$count || $q ne $oldq){
@@ -441,7 +464,7 @@ if ($run_inparanoid) {
 	++$hit;
 	$hitBA[$idQ][$hit] = int($idM);
 #	printf ("hitBA[%d][%d] = %d\n",$idQ,$hit,$idM);
-	$scoreBA{"$idQ:$idM"} = $score;   
+	$scoreBA{"$idQ:$idM"} = $score;
 	$scoreAB{"$idM:$idQ"} = $score_cutoff if ($scoreAB{"$idM:$idQ"} < $score_cutoff); # Initialize missing scores
 	$old_idQ = $idQ;
 #    }
@@ -457,7 +480,6 @@ if ($run_inparanoid) {
 ###################################################################################################################################### Modification by Isabella 1
 
 	# I removed the time consuming all vs all search and equalize scores for all pairs where there was a hit
-
     	foreach my $key (keys %scoreAB) {
 
 		my ($a, $b) = split(':', $key);
@@ -581,7 +603,7 @@ if ($run_inparanoid) {
 		printf ("%-20s\t%d\t%-20s\t", $nameA[$i], $bestscoreAB[$i], $nameB[$hit]) if ($debug == 2);
 		print "$bestscoreBA[$hit]\t$besthitBA[$hit]\n" if ($debug == 2);
 	    }
-	}   
+	}
     }
     print "$o ortholog candidates detected\n" if ($debug);
 #####################################################
@@ -700,11 +722,8 @@ if ($run_inparanoid) {
 	    $idM = $idC{$m};
 	    $score = $Fld[2];
 	    next unless (vec($is_ortologA,$idQ,1));
-	    
 	    next if (!overlap_test(@Fld));
-
 	    next if ($score < $score_cutoff);
-
 	    next if ($count and ($q eq $oldq));
 	    # Only comes here if this is the best hit:
 	    $besthitAC[$idQ] = $idM; 
@@ -735,11 +754,8 @@ if ($run_inparanoid) {
 	    $idM = $idC{$m};
 	    $score = $Fld[2];
 	    next unless (vec($is_ortologB,$idQ,1));
-
 	    next if (!overlap_test(@Fld));
-
 	    next if ($score < $score_cutoff);
-
 	    next if ($count and ($q eq $oldq));
 	    # Only comes here if this is the best hit:
 	    $besthitBC[$idQ] = $idM;
@@ -801,11 +817,8 @@ if ($run_inparanoid) {
 	$m = $Fld[1];
 	$score = $Fld[2];
 	next unless (vec($is_ortologA,$idA{$q},1));
-	
 	next if (!overlap_test(@Fld));
-
 	next if ($score < $score_cutoff);
-
 	if(!$count || $q ne $oldq){ # New query 
 	    $max_hit = $hit if ($hit > $max_hit);
 	    $hit = 0;
@@ -972,7 +985,7 @@ if ($run_inparanoid) {
 		    }
 		}
 		next if (! $paralogs); # Skip that paralog - it is already in cluster $k
-		push (@membersA,$hitID); # Add this hit to paralogs of A 
+		push (@membersA,$hitID); # Add this hit to paralogs of A
 	    }
 	}
 	# Calculate confidence values now:
@@ -987,7 +1000,7 @@ if ($run_inparanoid) {
 		}
 	    }
 	    else{
-		$confPA[$idP] = ($scoreAA{"$idA:$idP"} - $ortoS[$i]) / 
+		$confPA[$idP] = ($scoreAA{"$idA:$idP"} - $ortoS[$i]) /
 		    ($scoreAA{"$idA:$idA"} - $ortoS[$i]);
 	    }
 	    push (@tmp, $idP) if ($confPA[$idP] >= $conf_cutoff); # If one wishes to use only significant paralogs
@@ -1216,6 +1229,7 @@ if ($run_inparanoid) {
 # Check for alternative orthologs, sort paralogs by confidence and print results
 # ##############################################################################
     if ($use_bootstrap and $debug){
+    # WARNING: this code is NOT SAFE for parallel execution of inparanoid.
 	open FF, ">BS_vs_bits" or warn "Could not write to file BS_vs_bits\n";
     }
     for $i(1..$o){
@@ -1223,7 +1237,7 @@ if ($run_inparanoid) {
 	@membersB = split(/ /, $paralogsB[$i]);
 	$message = "";
 	$htmlmessage = "";
-	
+
 	$idB = $ortoB[$i];
 	$nB = $hitnBA[$idB];
 	for $idA(@membersA){
@@ -1238,7 +1252,7 @@ if ($run_inparanoid) {
 		# 1. Don't consider sequences that are already in this cluster
 		next if (vec($is_paralogA[$i],$idH,1));
 		next if ($confPA[$idH] > 0); # If $conf_cutoff > 0 idH might be incide circle, but not paralog
-		
+
 		# 2. Check if candidate for alternative ortholog is already clustered in stronger clusters
 		$in_other_cluster = 0;
 		for $k(1..($i-1)){ # Check if current ortholog is already clustered
@@ -1247,8 +1261,8 @@ if ($run_inparanoid) {
 			last;
 		    }
 		}
-#		 next if ($in_other_cluster); # This hit is clustered in cluster $k. It cannot be alternative ortholog 
-		
+#		 next if ($in_other_cluster); # This hit is clustered in cluster $k. It cannot be alternative ortholog
+
 		# 3. The best hit of candidate ortholog should be ortoA or at least to belong into this cluster
 		@besthits = split (/ /,$besthitAB[$idH]);
 		$this_family = 0;
@@ -1493,10 +1507,14 @@ else {
 }
 
 if ($run_blast) {
-      unlink "formatdb.log";
-      unlink "$fasta_seq_fileA.phr", "$fasta_seq_fileA.pin", "$fasta_seq_fileA.psq";
-      unlink "$fasta_seq_fileB.phr", "$fasta_seq_fileB.pin", "$fasta_seq_fileB.psq" if (@ARGV >= 2);
-      unlink "$fasta_seq_fileC.phr", "$fasta_seq_fileC.pin", "$fasta_seq_fileC.psq" if ($use_outgroup);
+    print "After adaptation for parallel execution, inparanoid no longer deletes *.phr, *.pin, *.psq files.\n";
+    print "Please remove these files from the parent/calling application.\n";
+    # TODO: add a new first command-line option --cleanup (similar to --blast-only), which will cleanup
+    #       the formatdb files derived from provided filenames.
+    #unlink "formatdb.log";
+    #unlink "$fasta_seq_fileA.phr", "$fasta_seq_fileA.pin", "$fasta_seq_fileA.psq";
+    #unlink "$fasta_seq_fileB.phr", "$fasta_seq_fileB.pin", "$fasta_seq_fileB.psq" if (@ARGV >= 2);
+    #unlink "$fasta_seq_fileC.phr", "$fasta_seq_fileC.pin", "$fasta_seq_fileC.psq" if ($use_outgroup);
 }
 
 ##############################################################
@@ -1511,12 +1529,12 @@ sub clean_up { # Sort members within cluster and clusters by size
     $totalA = $totalB = 0;
     # First pass: count members within each cluster
     foreach $i (1..$o) {
-	@membersA = split(/ /, $paralogsA[$i]);      
+	@membersA = split(/ /, $paralogsA[$i]);
 	$clusnA[$i] = @membersA; # Number of members in this cluster
 	$totalA += $clusnA[$i];
 	$paralogsA[$i] = join(' ',@membersA);
 	
-	@membersB = split(/ /, $paralogsB[$i]);      
+	@membersB = split(/ /, $paralogsB[$i]);
 	$clusnB[$i] = @membersB; # Number of members in this cluster
 	$totalB += $clusnB[$i];
 	$paralogsB[$i] = join(' ',@membersB);
@@ -1615,13 +1633,14 @@ sub clean_up { # Sort members within cluster and clusters by size
 
 }
 sub bootstrap{
+    # WARNING: this function WAS NOT tested for parallel runs of inparanoid.
     my $species = shift;
     my $seq_id1 = shift; # Query ID from $species
     my $seq_id2 = shift; # Best hit ID from other species
     my $seq_id3 = shift; # Second best hit
     # Retrieve sequence 1 from $species and sequence 2 from opposite species
     my $significance = 0.0;
-    
+
     if ($species eq $fasta_seq_fileA){
 	$file1 = $fasta_seq_fileA;
 	$file2 = $fasta_seq_fileB;
@@ -1641,8 +1660,8 @@ sub bootstrap{
     $seq1 = "";
     $seq2 = "";
 
-    $query_file = $seq_id1 . ".faq";                                                                              
-    open Q, ">$query_file" or die; 
+    $query_file = $seq_id1 . ".faq";
+    open Q, ">$query_file" or die;
 
     while (<A>){
 	if(/^\>/){
@@ -1670,13 +1689,13 @@ sub bootstrap{
     close B;
     close DB;
 
-    system "$formatdb -i $db_file";
+    system "$formatdb -i $db_file -l /dev/stdout";
     # Use soft masking in 1-pass mode for simplicity.
     system "$blastall -F\"m S\" -i $query_file -z 5000000 -d $db_file -p blastp -M $matrix -m7 | $blastParser 0 -a > $seq_id2.faa";
 
     # Note: Changed score cutoff 50 to 0 for blast2faa.pl (060402).
-    # Reason: after a cluster merger a score can be less than the cutoff (50) 
-    # which will remove the sequence in blast2faa.pl.  The bootstrapping will 
+    # Reason: after a cluster merger a score can be less than the cutoff (50)
+    # which will remove the sequence in blast2faa.pl.  The bootstrapping will
     # then fail.
     # AGAIN, update
 
@@ -1688,15 +1707,15 @@ sub bootstrap{
 	    open BS, "$seq_id2.bs" or die "pac failed\n";
 	    $_ = <BS>;
 	    ($dummy1,$dummy2,$dummy3,$dummy4,$significance) = split(/\s+/);
-	    close BS;	
+	    close BS;
 	}
 	else{
 	    print STDERR "pac failed\n"; # if ($debug);
 	    $significance = -0.01;
-	}	
+	}
     }
     else{
-	print STDERR "blast2faa for $query_file / $db_file failed\n"; # if ($debug);                                            
+	print STDERR "blast2faa for $query_file / $db_file failed\n"; # if ($debug);
 	$significance = 0.0; 
     }
 
@@ -1835,8 +1854,10 @@ sub do_blast_2pass {
 	close (FHR);
 
 	$tmpdir = "/tmp";   # May be slightly (5%) faster using the RAM disk "/dev/shm".
-	$tmpi = "$tmpdir/tmpi";
-	$tmpd = "$tmpdir/tmpd";
+	# Bound both i/d temporary files to the composite query-database name.
+	$tmpi = "$tmpdir/i-$Fld[0]-$Fld[1]";
+	$tmpd = "$tmpdir/d-$Fld[0]-$Fld[1]";
+	print "tmpi $tmpi, tmpd $tmpd\n";
 
 	# Do second pass with compositional adjustment off to get full-length alignments.
 	print STDERR "\nStarting second BLAST pass for $Fld[0] - $Fld[1] on ";
