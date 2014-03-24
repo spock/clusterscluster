@@ -902,9 +902,9 @@ def preprocess_input_files(inputs, args):
         inputs[primary_id]['as2file'] = as2file
         antismash2_reused = False
         if args.force and exists(as2file):
-            logging.warning('Reusing existing antismash2 annotation.')
             if not args.antismash_warning_shown:
                 args.antismash_warning_shown = True
+                logging.warning('Reusing existing antismash2 annotation(s).')
                 logging.warning('\t--no-extensions option will NOT be honored!')
                 logging.warning('\tDo not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
             # Re-using any further files is only possible if we do re-use antismash files.
@@ -919,6 +919,7 @@ def preprocess_input_files(inputs, args):
             as2_options.extend(['--cpus', str(cpu_count()), '--verbose', '--all-orfs'])
             as2_options.extend(['--input-type', 'nucl'])
             if args.no_extensions:
+                # TODO: make this warning be shown only once, similar to args.antismash_warning_shown
                 logging.warning("using --no-extensions option; cluster.py DOES NOT check if this option is supported!")
                 as2_options.append('--no-extensions')
             as2_options.append(fnafile)
@@ -931,9 +932,9 @@ def preprocess_input_files(inputs, args):
             # antismash's algorithm for naming the output file:
             # basename = seq_records[0].id
             # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
-            logging.debug('as2file (target): %s', as2file)
+#            logging.debug('as2file (target): %s', as2file)
             antismash2_file = join(output_folder, primary_id + '.final.gbk')
-            logging.debug('antismash2 file (source): %s', antismash2_file)
+#            logging.debug('antismash2 file (source): %s', antismash2_file)
             rename(antismash2_file, as2file)
             rmtree(output_folder)
             inputs[primary_id]['as2file'] = as2file
@@ -942,7 +943,7 @@ def preprocess_input_files(inputs, args):
         faafile = join(args.project, primary_id + '.faa')
         inputs[primary_id]['faafile'] = faafile
         if antismash2_reused and args.force and exists(faafile):
-            logging.warning('Reusing existing translations file.')
+            logging.debug('Reusing existing translations file.')
         else:
             extract_translation_from_genbank(as2file, faafile, False)
         del as2file, fnafile, faafile, infile
@@ -960,6 +961,7 @@ def prepare_inparanoid(inputs, args):
     for _ in inputs.itervalues():
         faafiles.append(basename(_['faafile']))
     del _
+#    faafiles.sort(key = lambda s: s.lower())
     faafiles.sort(key = lambda s: s.lower())
 
     # Put everything inparanoid-related into a subdir.
