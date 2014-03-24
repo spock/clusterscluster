@@ -57,7 +57,7 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
 # Define location of files and programs:
 # Edited: detect the number of CPUs/cores (will probably work only in bash).
 my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`;
-$num_cpus = chomp($num_cpus);
+chomp($num_cpus);
 print "Detected $num_cpus CPUs/cores.\n";
 # Proper method:
 #use Sys::Info;
