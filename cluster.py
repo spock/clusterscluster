@@ -998,9 +998,11 @@ def run_inparanoid(inparanoidir, faafiles):
     for _ in faafiles:
         counter += 1
         blast_single = ['inparanoid.pl', '--blast-only', _]
-        logging.info('Running blast %s / %s on a single genome: %s', counter,
+        logging.info('Start blast %s / %s on a single genome: %s', counter,
                      total_genomes, ' '.join(blast_single))
         out, err, retcode = utils.execute(blast_single)
+        logging.info(' Done blast %s / %s on a single genome: %s', counter,
+                     total_genomes, ' '.join(blast_single))
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while blasting %r',
                           retcode, err, _)
@@ -1012,9 +1014,11 @@ def run_inparanoid(inparanoidir, faafiles):
     for pair in permutations(faafiles, 2):
         counter += 1
         blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
-        logging.info('Running blast %s / %s on genome pair: %s', counter,
+        logging.info('Start blast %s / %s on genome pair: %s', counter,
                      total_permutations, ' '.join(blast_pair))
         out, err, retcode = utils.execute(blast_pair)
+        logging.info(' Done blast %s / %s on genome pair: %s', counter,
+                     total_permutations, ' '.join(blast_pair))
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while blasting %r and %r',
                           retcode, err, pair[0], pair[1])
@@ -1027,9 +1031,11 @@ def run_inparanoid(inparanoidir, faafiles):
     for pair in combinations(faafiles, 2):
         counter += 1
         inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
-        logging.info('Running inparanoid analysis %s / %s: %s', counter,
+        logging.info('Start inparanoid analysis %s / %s: %s', counter,
                      total_combinations, ' '.join(inparanoid_pair))
         out, err, retcode = utils.execute(inparanoid_pair)
+        logging.info(' Done inparanoid analysis %s / %s: %s', counter,
+                     total_combinations, ' '.join(inparanoid_pair))
         if retcode != 0:
             logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
                           retcode, err, pair[0], pair[1])
