@@ -58,6 +58,7 @@ $use_outgroup = 0; # Use proteins from the third genome as an outgroup        #
 # Edited: detect the number of CPUs/cores (will probably work only in bash).
 my $num_cpus = `ls -d /sys/devices/system/cpu/cpu[[:digit:]]* | wc -w`;
 $num_cpus = chomp($num_cpus);
+print "Detected $num_cpus CPUs/cores.\n";
 # Proper method:
 #use Sys::Info;
 #use Sys::Info::Constants qw( :device_cpu );
@@ -691,7 +692,7 @@ if ($run_inparanoid) {
 		   print STDERR "AC ok\n";
    	       }
 	       next;
-            } 
+            }
 
 	    $q = $Fld[0];
 	    $m = $Fld[1];
@@ -726,7 +727,7 @@ if ($run_inparanoid) {
 		   print STDERR "BC ok\n";
    	       }
 	       next;
-            } 
+            }
 
 	    $q = $Fld[0];
 	    $m = $Fld[1];
@@ -794,7 +795,7 @@ if ($run_inparanoid) {
 		print STDERR "AA ok\n";
 	    }
 	    next;
-	} 
+	}
 
 	$q = $Fld[0];
 	$m = $Fld[1];
@@ -809,7 +810,7 @@ if ($run_inparanoid) {
 	    $max_hit = $hit if ($hit > $max_hit);
 	    $hit = 0;
 	    $oldq = $q;
-	}   
+	}
 	++$hit;
 	++$count;
 	$scoreAA{"$idA{$q}:$idA{$m}"}  = int($score + 0.5);
@@ -827,7 +828,6 @@ if ($run_inparanoid) {
     open BB, "$blast_outputBB" or die "Blast output file B->B is missing\n";
     while (<BB>) {
 	chomp;                  # strip newline
-	
 	@Fld = split(/\s+/);    # Get query and match names
 
 	if( scalar @Fld < 9 ){
@@ -835,17 +835,15 @@ if ($run_inparanoid) {
 		print STDERR "BB ok\n";
 	    }
 	    next;
-	} 
+	}
 
 	$q = $Fld[0];
 	$m = $Fld[1];
 	$score = $Fld[2];
 	next unless (vec($is_ortologB,$idB{$q},1));
-	
 	next if (!overlap_test(@Fld));
-
 	next if ($score < $score_cutoff);
-	
+
 	if(!$count || $q ne $oldq){ # New query 
 	    $max_hit = $hit if ($hit > $max_hit);
 	    $oldq = $q;
@@ -877,10 +875,10 @@ if ($run_inparanoid) {
 	$idB = $ortoB[$i];
 	local @membersA = ();
 	local @membersB = ();
-	
+
 	undef $is_paralogA[$i];
 	undef $is_paralogB[$i];
-	
+
 	print "$i: Ortholog pair $nameA[$idA] and $nameB[$idB]. $hitnAA[$idA] hits for A and $hitnBB[$idB] hits for B\n"  if ($debug);
 	# Check if current ortholog is already clustered:
 	for $j(1..($i-1)){
@@ -1752,7 +1750,7 @@ sub do_blast_1pass {
   # $Fld [3] is database size
   # $Fld [4] is output name
 
-  # Use soft masking (low complexity masking by SEG in search phase, not in alignment phase). 
+  # Use soft masking (low complexity masking by SEG in search phase, not in alignment phase).
   system ("$blastall -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff > $Fld[4]");
 }
 
@@ -1817,7 +1815,7 @@ sub do_blast_2pass {
 	print STDERR "\nStarting first BLAST pass for $Fld[0] - $Fld[1] on ";
 	system("date");
 	my $command = "$blastall -C3 -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff|";
-	#print STDERR "command is: $command\n";
+	print STDERR "command is: $command\n";
 	open FHR, $command;
 
 	%theHits = ();
