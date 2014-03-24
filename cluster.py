@@ -992,23 +992,62 @@ def run_inparanoid(inparanoidir, faafiles):
     chdir(inparanoidir)
     logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
 
+    qsize = 100 * cpu_count()
+    tasks = Queue(maxsize = qsize)
     total_genomes = len(faafiles)
     print("BLASTing %s single genomes." % total_genomes)
+    # 1. Define worker.
+    def single_blaster(tasks):
+        '''
+        parallel worker for single blasts
+        '''
+        try:
+            # serial = counter, faaname = path to .faa file
+            (serial, faaname) = tasks.get() # By default, there is no timeout.
+        except: # Queue.Empty
+            logging.warning("single_blaster(tasks) encountered an exception trying tasks.get()")
+            raise
+        # Exit if 'STOP' element is found.
+        if faaname == 'STOP':
+            logging.debug("STOP found, exiting.")
+            return
+        blast_single = ['inparanoid.pl', '--blast-only', faaname]
+        # total_genomes comes from the context namespace
+        logging.info('Start blast %s / %s on a single genome: %s', serial,
+                     total_genomes, ' '.join(blast_single))
+        out, err, retcode = utils.execute(blast_single)
+        logging.info(' Done blast %s / %s on a single genome: %s', serial,
+                     total_genomes, ' '.join(blast_single))
+        if retcode != 0:
+            logging.debug('inparanoid returned %d: %r while blasting %r, full output follows:\n%s',
+                          retcode, err, faaname, out)
+    # 2. Start workers.
+    workers = []
+    for _ in range(cpu_count()):
+        p = Process(target=single_blaster, args=(tasks))
+        workers.append(p)
+        p.start()
+    del _, p
+    # 3. Populate the tasks queue.
+    logging.debug("Populating the queue.")
     counter = 0
     for _ in faafiles:
         counter += 1
-        blast_single = ['inparanoid.pl', '--blast-only', _]
-        logging.info('Start blast %s / %s on a single genome: %s', counter,
-                     total_genomes, ' '.join(blast_single))
-        out, err, retcode = utils.execute(blast_single)
-        logging.info(' Done blast %s / %s on a single genome: %s', counter,
-                     total_genomes, ' '.join(blast_single))
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while blasting %r',
-                          retcode, err, _)
-    del _, blast_single, out, err, retcode, counter, total_genomes
+        tasks.put((counter, _)) # will block until all-qsize items are consumed
+    del _, counter
+    # 4. Add STOP messages.
+    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+    for _ in range(cpu_count()):
+        tasks.put((0, 'STOP'))
+    del _
+    # 5. Wait for all processes to finish, close the queue.
+    for p in workers:
+        p.join()
+    tasks.close()
+    del p, total_genomes
 
     total_permutations = len(list(permutations(faafiles, 2)))
+    # FIXME: run in parallel
     print("BLASTing %s pairwise permutations." % total_permutations)
     counter = 0
     for pair in permutations(faafiles, 2):
@@ -1024,8 +1063,8 @@ def run_inparanoid(inparanoidir, faafiles):
                           retcode, err, pair[0], pair[1])
     del blast_pair, pair, out, err, retcode, counter, total_permutations
 
-    # FIXME: make run in parallel.
     total_combinations = len(list(combinations(faafiles, 2)))
+    # FIXME: run in parallel
     print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
     counter = 0
     for pair in combinations(faafiles, 2):
