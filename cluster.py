@@ -997,7 +997,7 @@ def run_inparanoid(inparanoidir, faafiles):
     total_genomes = len(faafiles)
     print("BLASTing %s single genomes." % total_genomes)
     # 1. Define worker.
-    def single_blaster(tasks):
+    def single_blaster(tasks, total_genomes):
         '''
         parallel worker for single blasts
         '''
@@ -1024,7 +1024,7 @@ def run_inparanoid(inparanoidir, faafiles):
     # 2. Start workers.
     workers = []
     for _ in range(cpu_count()):
-        p = Process(target=single_blaster, args=(tasks))
+        p = Process(target=single_blaster, args=(tasks, total_genomes))
         workers.append(p)
         p.start()
     del _, p
