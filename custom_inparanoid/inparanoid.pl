@@ -510,11 +510,11 @@ if ($run_inparanoid) {
 		$tmp = $hitAB[$idA][$hit];
 		$hitAB[$idA][$hit] = $hitAB[$idA][$hit+1];
 		$hitAB[$idA][$hit+1] = $tmp;
-		--$hit if ($hit > 1);      
+		--$hit if ($hit > 1);
 	    }
 	}
 	$bestscore = $bestscoreAB[$idA] = $scoreAB{"$idA:$hitAB[$idA][1]"};
-	$besthitAB[$idA] = $hitAB[$idA][1];   
+	$besthitAB[$idA] = $hitAB[$idA][1];
 	for $hit (2..$hitnAB[$idA]){
 	    if ($bestscore - $scoreAB{"$idA:$hitAB[$idA][$hit]"} <= $grey_zone){
 		$besthitAB[$idA] .= " $hitAB[$idA][$hit]";
@@ -528,7 +528,7 @@ if ($run_inparanoid) {
 #    printf ("besthitAB[%d] = hitAB[%d][%d] = %d\n",$idA,$idA,$hit,$besthitAB[$idA]);
 	
     }
-    
+
     for $idB(1..$B){
 #    print "Loop index = $idB\n";
 	next if (!($hitnBA[$idB]));
@@ -1834,7 +1834,7 @@ sub do_blast_2pass {
 	}
 	close (FHR);
 
-	$tmpdir = ".";   # May be slightly (5%) faster using the RAM disk "/dev/shm".
+	$tmpdir = "/tmp";   # May be slightly (5%) faster using the RAM disk "/dev/shm".
 	$tmpi = "$tmpdir/tmpi";
 	$tmpd = "$tmpdir/tmpd";
 
@@ -1849,7 +1849,7 @@ sub do_blast_2pass {
 		print FHT ">$aQuery\n".$sequencesA {">$aQuery"}."\n";
 		close (FHT);
 
-	        # Create mini-database of hit sequences
+	    # Create mini-database of hit sequences
 		open (FHT, ">$tmpd");
 		foreach $aHit (split (/\s/, $theHits {$aQuery})) {
 			print FHT ">$aHit\n".$sequencesB {">$aHit"}."\n";
