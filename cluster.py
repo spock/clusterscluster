@@ -40,6 +40,7 @@ from __future__ import print_function
 import sys
 import logging
 import os
+import glob
 
 from pprint import pprint
 from os import mkdir, rename, symlink, getcwd, chdir, remove
@@ -1087,6 +1088,15 @@ def run_inparanoid(inparanoidir, faafiles):
             logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
                           retcode, err, pair[0], pair[1])
     del inparanoid_pair, pair, out, err, retcode, counter, total_combinations
+
+    # Cleanup .phr, .pin, .psq formatdb output files after all inparanoid runs,
+    # including analysis; parallel inparanoid does not do this.
+    formatdb_extensions = ['*.phr', '*.pin', '*.psq']
+    for ext in formatdb_extensions:
+        for _ in glob.glob(inparanoidir + os.sep + ext):
+            logging.debug("Deleting %s.", _)
+            remove(_)
+    del _, formatdb_extensions
 
     # CD back to the initial directory.
     chdir(curr_path)
