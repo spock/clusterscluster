@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#!/usr/bin/perl
 ###############################################################################
 # InParanoid version 4.1
 # Copyright (C) Erik Sonnhammer, Kristoffer Forslund, Isabella Pekkari, 
