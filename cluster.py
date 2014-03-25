@@ -1099,7 +1099,7 @@ def run_inparanoid(inparanoidir, faafiles):
     for pair in permutations(faafiles, 2):
         counter += 1
         tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
-    del _, counter
+    del pair, counter
     # 4. Add STOP messages.
     logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
     for _ in range(cpu_count()):
@@ -1153,7 +1153,7 @@ def run_inparanoid(inparanoidir, faafiles):
     for pair in combinations(faafiles, 2):
         counter += 1
         tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
-    del _, counter
+    del pair, counter
     # 4. Add STOP messages.
     logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
     for _ in range(cpu_count()):
