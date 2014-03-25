@@ -941,7 +941,7 @@ def preprocess_input_files(inputs, args):
             # basename = seq_records[0].id
             # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
 #            logging.debug('as2file (target): %s', as2file)
-            antismash2_file = join(output_folder, primary_id + '.final.gbk')
+            antismash2_file = glob.glob(join(output_folder, '*.final.gbk'))[0]
 #            logging.debug('antismash2 file (source): %s', antismash2_file)
             rename(antismash2_file, as2file)
             rmtree(output_folder)
