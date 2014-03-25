@@ -72,7 +72,7 @@ print "Detected $num_cpus CPUs/cores.\n";
 
 # To run inparanoid.pl itself in parallel, num_cpus should be limited.
 # Comment out the line below for all-cpus blast.
-$num_cpus = "2";
+$num_cpus = "1";
 
 # Note: outgroup code was not checked for compatibility with running multiple parallel inparanoid processes.
 
