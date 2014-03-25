@@ -1112,21 +1112,58 @@ def run_inparanoid(inparanoidir, faafiles):
     del p, total_permutations, workers
 
     total_combinations = len(list(combinations(faafiles, 2)))
-    # FIXME: run in parallel
     print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
+    tasks = Queue(maxsize = qsize)
+    # 1. Define worker.
+    def inparanoider(tasks, total_combinations):
+        '''
+        parallel worker for paired blasts
+        '''
+        while True:
+            try:
+                # serial = counter, faa1/2 = paths to .faa files
+                (serial, faa1, faa2) = tasks.get() # By default, there is no timeout.
+            except: # Queue.Empty
+                logging.warning("inparanoider(tasks) encountered an exception trying tasks.get()")
+                raise
+            # Exit if 'STOP' element is found.
+            if faa1 == 'STOP':
+                logging.debug("STOP found, exiting.")
+                break
+            inparanoid_pair = ['inparanoid.pl', faa1, faa2]
+            logging.info('Start inparanoid %s / %s: %s', serial,
+                         total_combinations, ' '.join(inparanoid_pair))
+            out, err, retcode = utils.execute(inparanoid_pair)
+            logging.info(' Done inparanoid %s / %s: %s', serial,
+                         total_combinations, ' '.join(inparanoid_pair))
+            if retcode != 0:
+                logging.debug('inparanoid returned %d: %r while analyzing %r and %r, full output follows:\n%s',
+                              retcode, err, faa1, faa2, out)
+            del inparanoid_pair, out, err, retcode
+    # 2. Start workers.
+    workers = []
+    for _ in range(cpu_count()):
+        p = Process(target=inparanoider, args=(tasks, total_combinations))
+        workers.append(p)
+        p.start()
+    del _, p
+    # 3. Populate the tasks queue.
+    logging.debug("Populating the queue.")
     counter = 0
     for pair in combinations(faafiles, 2):
         counter += 1
-        inparanoid_pair = ['inparanoid.pl', pair[0], pair[1]]
-        logging.info('Start inparanoid analysis %s / %s: %s', counter,
-                     total_combinations, ' '.join(inparanoid_pair))
-        out, err, retcode = utils.execute(inparanoid_pair)
-        logging.info(' Done inparanoid analysis %s / %s: %s', counter,
-                     total_combinations, ' '.join(inparanoid_pair))
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while analyzing %r and %r',
-                          retcode, err, pair[0], pair[1])
-    del inparanoid_pair, pair, out, err, retcode, counter, total_combinations
+        tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
+    del _, counter
+    # 4. Add STOP messages.
+    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+    for _ in range(cpu_count()):
+        tasks.put((0, 'STOP', ''))
+    del _
+    # 5. Wait for all processes to finish, close the queue.
+    for p in workers:
+        p.join()
+    tasks.close()
+    del p, total_combinations, workers
 
     # Cleanup .phr, .pin, .psq formatdb output files after all inparanoid runs,
     # including analysis; parallel inparanoid does not do this.
