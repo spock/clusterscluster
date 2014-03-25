@@ -1169,7 +1169,7 @@ def run_inparanoid(inparanoidir, faafiles):
     # including analysis; parallel inparanoid does not do this.
     formatdb_extensions = ['*.phr', '*.pin', '*.psq']
     for ext in formatdb_extensions:
-        for _ in glob.glob(inparanoidir + os.sep + ext):
+        for _ in glob.glob(join(inparanoidir, ext)):
             logging.debug("Deleting %s.", _)
             remove(_)
     del _, formatdb_extensions
