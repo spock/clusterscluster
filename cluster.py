@@ -1001,9 +1001,11 @@ def run_inparanoid(inparanoidir, faafiles):
     logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
 
     qsize = 100 * cpu_count()
-    tasks = Queue(maxsize = qsize)
+
+
     total_genomes = len(faafiles)
     print("BLASTing %s single genomes." % total_genomes)
+    tasks = Queue(maxsize = qsize)
     # 1. Define worker.
     def single_blaster(tasks, total_genomes):
         '''
@@ -1021,7 +1023,6 @@ def run_inparanoid(inparanoidir, faafiles):
                 logging.debug("STOP found, exiting.")
                 break
             blast_single = ['inparanoid.pl', '--blast-only', faaname]
-            # total_genomes comes from the context namespace
             logging.info('Start blast %s / %s on a single genome: %s', serial,
                          total_genomes, ' '.join(blast_single))
             out, err, retcode = utils.execute(blast_single)
@@ -1053,24 +1054,62 @@ def run_inparanoid(inparanoidir, faafiles):
     for p in workers:
         p.join()
     tasks.close()
-    del p, total_genomes
+    del p, total_genomes, workers
+
 
     total_permutations = len(list(permutations(faafiles, 2)))
-    # FIXME: run in parallel
+    tasks = Queue(maxsize = qsize)
     print("BLASTing %s pairwise permutations." % total_permutations)
+    # 1. Define worker.
+    def pair_blaster(tasks, total_permutations):
+        '''
+        parallel worker for paired blasts
+        '''
+        while True:
+            try:
+                # serial = counter, faa1/2 = paths to .faa files
+                (serial, faa1, faa2) = tasks.get() # By default, there is no timeout.
+            except: # Queue.Empty
+                logging.warning("pair_blaster(tasks) encountered an exception trying tasks.get()")
+                raise
+            # Exit if 'STOP' element is found.
+            if faa1 == 'STOP':
+                logging.debug("STOP found, exiting.")
+                break
+            blast_pair = ['inparanoid.pl', '--blast-only', faa1, faa2]
+            logging.info('Start blast %s / %s on genome pair: %s', serial,
+                         total_permutations, ' '.join(blast_pair))
+            out, err, retcode = utils.execute(blast_pair)
+            logging.info(' Done blast %s / %s on genome pair: %s', serial,
+                         total_permutations, ' '.join(blast_pair))
+            if retcode != 0:
+                logging.debug('inparanoid returned %d: %r while blasting %r and %r, full output follows:\n%s',
+                              retcode, err, faa1, faa2, out)
+            del blast_pair, out, err, retcode
+    # 2. Start workers.
+    workers = []
+    for _ in range(cpu_count()):
+        p = Process(target=pair_blaster, args=(tasks, total_permutations))
+        workers.append(p)
+        p.start()
+    del _, p
+    # 3. Populate the tasks queue.
+    logging.debug("Populating the queue.")
     counter = 0
     for pair in permutations(faafiles, 2):
         counter += 1
-        blast_pair = ['inparanoid.pl', '--blast-only', pair[0], pair[1]]
-        logging.info('Start blast %s / %s on genome pair: %s', counter,
-                     total_permutations, ' '.join(blast_pair))
-        out, err, retcode = utils.execute(blast_pair)
-        logging.info(' Done blast %s / %s on genome pair: %s', counter,
-                     total_permutations, ' '.join(blast_pair))
-        if retcode != 0:
-            logging.debug('inparanoid returned %d: %r while blasting %r and %r',
-                          retcode, err, pair[0], pair[1])
-    del blast_pair, pair, out, err, retcode, counter, total_permutations
+        tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
+    del _, counter
+    # 4. Add STOP messages.
+    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+    for _ in range(cpu_count()):
+        tasks.put((0, 'STOP', ''))
+    del _
+    # 5. Wait for all processes to finish, close the queue.
+    for p in workers:
+        p.join()
+    tasks.close()
+    del p, total_permutations, workers
 
     total_combinations = len(list(combinations(faafiles, 2)))
     # FIXME: run in parallel
