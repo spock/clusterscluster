@@ -45,7 +45,7 @@ import glob
 from pprint import pprint
 from os import mkdir, rename, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
-from shutil import rmtree
+from shutil import rmtree, move
 from argparse import ArgumentParser
 from Bio import SeqIO
 from Bio.Alphabet import generic_dna#, generic_protein
@@ -1227,9 +1227,9 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     del out, err, retcode
 
     # Move generated 'project' and 'projects' executables to the {project} directory.
-    rename(join(quickparanoid, project), join(curr_path, project, project))
-    rename(join(quickparanoid, project + 's'),
-           join(curr_path, project, project + 's'))
+    move(join(quickparanoid, project), join(curr_path, project, project))
+    move(join(quickparanoid, project + 's'),
+         join(curr_path, project, project + 's'))
 
     # Delete leftover garbage from quickparanoid.
     for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h',
