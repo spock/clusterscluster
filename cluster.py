@@ -578,9 +578,12 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
     species = inputs.keys()
     species_count = len(species)
     workers = min(cpu_count(), species_count)
+    workers_list = []
     logging.info("Starting %s GenBank parse workers.", workers)
     for _ in range(workers):
-        Process(target=worker, args=(task_queue, done_queue, rulesdict)).start()
+        p = Process(target=worker, args=(task_queue, done_queue, rulesdict))
+        workers_list.append(p)
+        p.start()
     del _
 
     logging.debug("Putting ID-path tuples into task_queue")
@@ -605,6 +608,11 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
         all_clusters.extend(all_clusters_l)
     del _, k, cluster2genes_l, numbers2products_l, coords2numbers_l
     del gene2clusters_l, all_clusters_l, clustersizes_l
+
+    # join() the processes
+    for p in workers_list:
+        p.join()
+    del p, workers_list
 
     task_queue.close()
     done_queue.close()
