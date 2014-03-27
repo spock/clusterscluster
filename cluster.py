@@ -43,7 +43,7 @@ import os
 import glob
 
 from pprint import pprint
-from os import mkdir, rename, symlink, getcwd, chdir, remove
+from os import mkdir, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
 from shutil import rmtree, move
 from argparse import ArgumentParser
@@ -272,6 +272,7 @@ def graph_unique_change_when_adding(species, cluster2genes, weights_clean, rever
     height = 90
     first = True
     for (numclust, s) in numclust_species:
+        # FIXME: some species have 0 clusters (numclust = 0), foresee this!
         if first: # no need to calculate anything, ratio is 1.0
             first = False
             ratio = 1.0
@@ -949,7 +950,7 @@ def preprocess_input_files(inputs, args):
 #            logging.debug('as2file (target): %s', as2file)
             antismash2_file = glob.glob(join(output_folder, '*.final.gbk'))[0]
 #            logging.debug('antismash2 file (source): %s', antismash2_file)
-            rename(antismash2_file, as2file)
+            move(antismash2_file, as2file)
             rmtree(output_folder)
             inputs[primary_id]['as2file'] = as2file
             del output_folder, out
