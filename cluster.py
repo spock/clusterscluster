@@ -659,8 +659,6 @@ def process(inputs, paranoid, args):
     # TODO: replace paths with args.paths, or inputs?
     # TODO: replace 'trim' support with no-extensions support (?).
     # TODO: deprecate skipp? (can be filtered out at the analysis step)
-    # TODO: add memory cleanup everywhere :)
-    # TODO: switch from record.name to record.id.
 
     mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
 
@@ -836,7 +834,7 @@ def preprocess_input_files(inputs, args):
     inputs: dictionary to populate
     args.paths: list of genbank files to process
     '''
-    # FIXME: split into 2 parts:
+    # TODO: split into 2 parts:
     # - linear processing of genbank IDs
     # - parallel conversion/translation extraction/antismashing
     for infile in args.paths:
@@ -1008,7 +1006,11 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     chdir(inparanoidir)
     logging.debug("Changed directory from %s to %s.", curr_path, inparanoidir)
 
-    qsize = 100 * cpu_count()
+    if emulate_inparanoid:
+        num_workers = 1 # to avoid output mangling
+    else:
+        num_workers = cpu_count()
+    qsize = 100 * num_workers
 
 
     total_genomes = len(faafiles)
@@ -1046,7 +1048,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
                 del blast_single, out, err, retcode
     # 2. Start workers.
     workers = []
-    for _ in range(cpu_count()):
+    for _ in range(num_workers):
         p = Process(target=single_blaster, args=(tasks, total_genomes))
         workers.append(p)
         p.start()
@@ -1059,8 +1061,8 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         tasks.put((counter, _)) # will block until all-qsize items are consumed
     del _, counter
     # 4. Add STOP messages.
-    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
-    for _ in range(cpu_count()):
+    logging.debug("Adding %s STOP messages to task_queue.", num_workers)
+    for _ in range(num_workers):
         tasks.put((0, 'STOP'))
     del _
     # 5. Wait for all processes to finish, close the queue.
@@ -1105,7 +1107,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
                 del blast_pair, out, err, retcode
     # 2. Start workers.
     workers = []
-    for _ in range(cpu_count()):
+    for _ in range(num_workers):
         p = Process(target=pair_blaster, args=(tasks, total_permutations))
         workers.append(p)
         p.start()
@@ -1118,8 +1120,8 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
     del pair, counter
     # 4. Add STOP messages.
-    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
-    for _ in range(cpu_count()):
+    logging.debug("Adding %s STOP messages to task_queue.", num_workers)
+    for _ in range(num_workers):
         tasks.put((0, 'STOP', ''))
     del _
     # 5. Wait for all processes to finish, close the queue.
@@ -1160,7 +1162,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
                 del inparanoid_pair, out, err, retcode
         # 2. Start workers.
         workers = []
-        for _ in range(cpu_count()):
+        for _ in range(num_workers):
             p = Process(target=inparanoider, args=(tasks, total_combinations))
             workers.append(p)
             p.start()
@@ -1173,15 +1175,15 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
             tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
         del pair, counter
         # 4. Add STOP messages.
-        logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
-        for _ in range(cpu_count()):
+        logging.debug("Adding %s STOP messages to task_queue.", num_workers)
+        for _ in range(num_workers):
             tasks.put((0, 'STOP', ''))
         del _
         # 5. Wait for all processes to finish, close the queue.
         for p in workers:
             p.join()
         tasks.close()
-        del p, total_combinations, workers
+        del p, total_combinations, workers, num_workers
     else:
         logging.info('Skipped inparanoid analysis because of --emulate-inparanoid.')
 
@@ -1298,7 +1300,7 @@ def main():
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
     parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names tree_conflict problems [default: %(default)s]")
     parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] tree_conflict problems [default: %(default)s]")
-    parser.add_argument('--emulate-inparanoid', action = 'store_true', default = False, help='only print generated inparanoid commands, do not run; exit after inparanoid blasting [default: %(default)s]')
+    parser.add_argument('--emulate-inparanoid', action = 'store_true', default = False, help='only print generated inparanoid commands, do not run; exit after inparanoid blasting; suppress some normal output [default: %(default)s]')
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument("--project", default='cluster_project', help="put all the project files into this directory [default: %(default)s]")
     parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
@@ -1319,7 +1321,8 @@ def main():
         level = logging.WARNING
     else:
         level = logging.INFO
-    logging.basicConfig(level=level, format='%(asctime)s::%(levelname)s::%(message)s',
+    logging.basicConfig(level=level,
+                        format='%(asctime)s::%(levelname)s::%(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
     # Where do we take the paths from?
@@ -1345,8 +1348,12 @@ def main():
         sys.exit(4)
     logging.info("Will process %s input files.", len(args.paths))
 
-    print('Used arguments and options:')
-    pprint(vars(args))
+    if args.emulate_inparanoid:
+        print('Used arguments and options:', file = sys.stderr)
+        pprint(vars(args), stream = sys.stderr)
+    else:
+        print('Used arguments and options:')
+        pprint(vars(args))
 
     if exists(args.project):
         if args.force:
