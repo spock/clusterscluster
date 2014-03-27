@@ -995,7 +995,7 @@ def prepare_inparanoid(inputs, args):
 
     return inparanoidir, faafiles
 
-def run_inparanoid(inparanoidir, faafiles):
+def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     # Prepend custom_inparanoid path to PATH, so that it is used first.
     # alternative path finding method: dirname(sys.argv[0])
     custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
@@ -1012,7 +1012,8 @@ def run_inparanoid(inparanoidir, faafiles):
 
 
     total_genomes = len(faafiles)
-    print("BLASTing %s single genomes." % total_genomes)
+    if not emulate_inparanoid:
+        print("BLASTing %s single genomes." % total_genomes)
     tasks = Queue(maxsize = qsize)
     # 1. Define worker.
     def single_blaster(tasks, total_genomes):
@@ -1031,14 +1032,18 @@ def run_inparanoid(inparanoidir, faafiles):
                 logging.debug("STOP found, exiting.")
                 break
             blast_single = ['inparanoid.pl', '--blast-only', faaname]
-            logging.info('Start blast %s / %s on a single genome: %s', serial,
-                         total_genomes, ' '.join(blast_single))
-            out, err, retcode = utils.execute(blast_single)
-            logging.info(' Done blast %s / %s on a single genome: %s', serial,
-                         total_genomes, ' '.join(blast_single))
-            if retcode != 0:
-                logging.debug('inparanoid returned %d: %r while blasting %r, full output follows:\n%s',
-                              retcode, err, faaname, out)
+            if emulate_inparanoid:
+                print(' '.join(blast_single))
+            else:
+                logging.info('Start blast %s / %s on a single genome: %s',
+                             serial, total_genomes, ' '.join(blast_single))
+                out, err, retcode = utils.execute(blast_single)
+                logging.info(' Done blast %s / %s on a single genome: %s',
+                             serial, total_genomes, ' '.join(blast_single))
+                if retcode != 0:
+                    logging.debug('inparanoid returned %d: %r while blasting %r, full output follows:\n%s',
+                                  retcode, err, faaname, out)
+                del blast_single, out, err, retcode
     # 2. Start workers.
     workers = []
     for _ in range(cpu_count()):
@@ -1067,7 +1072,8 @@ def run_inparanoid(inparanoidir, faafiles):
 
     total_permutations = len(list(permutations(faafiles, 2)))
     tasks = Queue(maxsize = qsize)
-    print("BLASTing %s pairwise permutations." % total_permutations)
+    if not emulate_inparanoid:
+        print("BLASTing %s pairwise permutations." % total_permutations)
     # 1. Define worker.
     def pair_blaster(tasks, total_permutations):
         '''
@@ -1085,15 +1091,18 @@ def run_inparanoid(inparanoidir, faafiles):
                 logging.debug("STOP found, exiting.")
                 break
             blast_pair = ['inparanoid.pl', '--blast-only', faa1, faa2]
-            logging.info('Start blast %s / %s on genome pair: %s', serial,
-                         total_permutations, ' '.join(blast_pair))
-            out, err, retcode = utils.execute(blast_pair)
-            logging.info(' Done blast %s / %s on genome pair: %s', serial,
-                         total_permutations, ' '.join(blast_pair))
-            if retcode != 0:
-                logging.debug('inparanoid returned %d: %r while blasting %r and %r, full output follows:\n%s',
-                              retcode, err, faa1, faa2, out)
-            del blast_pair, out, err, retcode
+            if emulate_inparanoid:
+                print(' '.join(blast_pair))
+            else:
+                logging.info('Start blast %s / %s on genome pair: %s', serial,
+                             total_permutations, ' '.join(blast_pair))
+                out, err, retcode = utils.execute(blast_pair)
+                logging.info(' Done blast %s / %s on genome pair: %s', serial,
+                             total_permutations, ' '.join(blast_pair))
+                if retcode != 0:
+                    logging.debug('inparanoid returned %d: %r while blasting %r and %r, full output follows:\n%s',
+                                  retcode, err, faa1, faa2, out)
+                del blast_pair, out, err, retcode
     # 2. Start workers.
     workers = []
     for _ in range(cpu_count()):
@@ -1119,68 +1128,72 @@ def run_inparanoid(inparanoidir, faafiles):
     tasks.close()
     del p, total_permutations, workers
 
-    total_combinations = len(list(combinations(faafiles, 2)))
-    print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
-    tasks = Queue(maxsize = qsize)
-    # 1. Define worker.
-    def inparanoider(tasks, total_combinations):
-        '''
-        parallel worker for paired blasts
-        '''
-        while True:
-            try:
-                # serial = counter, faa1/2 = paths to .faa files
-                (serial, faa1, faa2) = tasks.get() # By default, there is no timeout.
-            except: # Queue.Empty
-                logging.warning("inparanoider(tasks) encountered an exception trying tasks.get()")
-                raise
-            # Exit if 'STOP' element is found.
-            if faa1 == 'STOP':
-                logging.debug("STOP found, exiting.")
-                break
-            inparanoid_pair = ['inparanoid.pl', faa1, faa2]
-            logging.info('Start inparanoid %s / %s: %s', serial,
-                         total_combinations, ' '.join(inparanoid_pair))
-            out, err, retcode = utils.execute(inparanoid_pair)
-            logging.info(' Done inparanoid %s / %s: %s', serial,
-                         total_combinations, ' '.join(inparanoid_pair))
-            if retcode != 0:
-                logging.debug('inparanoid returned %d: %r while analyzing %r and %r, full output follows:\n%s',
-                              retcode, err, faa1, faa2, out)
-            del inparanoid_pair, out, err, retcode
-    # 2. Start workers.
-    workers = []
-    for _ in range(cpu_count()):
-        p = Process(target=inparanoider, args=(tasks, total_combinations))
-        workers.append(p)
-        p.start()
-    del _, p
-    # 3. Populate the tasks queue.
-    logging.debug("Populating the queue.")
-    counter = 0
-    for pair in combinations(faafiles, 2):
-        counter += 1
-        tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
-    del pair, counter
-    # 4. Add STOP messages.
-    logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
-    for _ in range(cpu_count()):
-        tasks.put((0, 'STOP', ''))
-    del _
-    # 5. Wait for all processes to finish, close the queue.
-    for p in workers:
-        p.join()
-    tasks.close()
-    del p, total_combinations, workers
+    if not emulate_inparanoid:
+        total_combinations = len(list(combinations(faafiles, 2)))
+        print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
+        tasks = Queue(maxsize = qsize)
+        # 1. Define worker.
+        def inparanoider(tasks, total_combinations):
+            '''
+            parallel worker for paired blasts
+            '''
+            while True:
+                try:
+                    # serial = counter, faa1/2 = paths to .faa files
+                    (serial, faa1, faa2) = tasks.get() # By default, there is no timeout.
+                except: # Queue.Empty
+                    logging.warning("inparanoider(tasks) encountered an exception trying tasks.get()")
+                    raise
+                # Exit if 'STOP' element is found.
+                if faa1 == 'STOP':
+                    logging.debug("STOP found, exiting.")
+                    break
+                inparanoid_pair = ['inparanoid.pl', faa1, faa2]
+                logging.info('Start inparanoid %s / %s: %s', serial,
+                             total_combinations, ' '.join(inparanoid_pair))
+                out, err, retcode = utils.execute(inparanoid_pair)
+                logging.info(' Done inparanoid %s / %s: %s', serial,
+                             total_combinations, ' '.join(inparanoid_pair))
+                if retcode != 0:
+                    logging.debug('inparanoid returned %d: %r while analyzing %r and %r, full output follows:\n%s',
+                                  retcode, err, faa1, faa2, out)
+                del inparanoid_pair, out, err, retcode
+        # 2. Start workers.
+        workers = []
+        for _ in range(cpu_count()):
+            p = Process(target=inparanoider, args=(tasks, total_combinations))
+            workers.append(p)
+            p.start()
+        del _, p
+        # 3. Populate the tasks queue.
+        logging.debug("Populating the queue.")
+        counter = 0
+        for pair in combinations(faafiles, 2):
+            counter += 1
+            tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
+        del pair, counter
+        # 4. Add STOP messages.
+        logging.debug("Adding %s STOP messages to task_queue.", cpu_count())
+        for _ in range(cpu_count()):
+            tasks.put((0, 'STOP', ''))
+        del _
+        # 5. Wait for all processes to finish, close the queue.
+        for p in workers:
+            p.join()
+        tasks.close()
+        del p, total_combinations, workers
+    else:
+        logging.info('Skipped inparanoid analysis because of --emulate-inparanoid.')
 
     # Cleanup .phr, .pin, .psq formatdb output files after all inparanoid runs,
     # including analysis; parallel inparanoid does not do this.
-    formatdb_extensions = ['*.phr', '*.pin', '*.psq']
-    for ext in formatdb_extensions:
-        for _ in glob.glob(join(inparanoidir, ext)):
-            logging.debug("Deleting %s.", _)
-            remove(_)
-    del _, formatdb_extensions
+    if not emulate_inparanoid:
+        formatdb_extensions = ['*.phr', '*.pin', '*.psq']
+        for ext in formatdb_extensions:
+            for _ in glob.glob(join(inparanoidir, ext)):
+                logging.debug("Deleting %s.", _)
+                remove(_)
+        del _, formatdb_extensions
 
     # CD back to the initial directory.
     chdir(curr_path)
@@ -1278,7 +1291,6 @@ def main():
     parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to debug [default: %(default)s]")
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    # FIXME: --trim is broken (on by default, impossible to turn off).
     parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
@@ -1286,6 +1298,7 @@ def main():
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
     parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names tree_conflict problems [default: %(default)s]")
     parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] tree_conflict problems [default: %(default)s]")
+    parser.add_argument('--emulate-inparanoid', action = 'store_true', default = False, help='only print generated inparanoid commands, do not run; exit after inparanoid blasting [default: %(default)s]')
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
     parser.add_argument("--project", default='cluster_project', help="put all the project files into this directory [default: %(default)s]")
     parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
@@ -1353,7 +1366,10 @@ def main():
     if len(args.paths) == 1: # single input - exit
         sys.exit(3)
     inparanoidir, faafiles = prepare_inparanoid(inputs, args)
-    run_inparanoid(inparanoidir, faafiles)
+    run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
+    if args.emulate_inparanoid:
+        logging.info('Exiting prematurely because of --emulate-inparanoid.')
+        return 0
 
     result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
     del inparanoidir, faafiles
