@@ -78,13 +78,19 @@ $num_cpus = "1";
 
 $blastall = "blastall -a $num_cpus";  #Add -aN to use N processors; add -V, -VT to emulate older BLAST.
 $formatdb = "formatdb";
-$seqstat = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/seqstat.jar";
-$blastParser = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/blast_parser.pl";
+
+# Trying to avoid absolute hard-coded paths.
+use Cwd 'abs_path';
+use File::Basename 'dirname';
+my $inpadir = dirname(abs_path($0)); # or dirname(__FILE__), from use File::Basename
+
+$seqstat = "$inpadir/seqstat.jar";
+$blastParser = "$inpadir/blast_parser.pl";
 
 #$matrix = "BLOSUM62"; # Reasonable default for comparison of eukaryotes.
 $matrix = "BLOSUM45"; #(for prokaryotes),
 # For seqstat.jar, which requires the file and not simply the name of the matrix.
-$matrix_full = "/home/bogdan/workspace/clusterscluster/custom_inparanoid/BLOSUM45";
+$matrix_full = "$inpadir/BLOSUM45";
 #$matrix = "BLOSUM80"; #(orthologs within metazoa),
 #$matrix = "PAM70";
 #$matrix = "PAM30";
