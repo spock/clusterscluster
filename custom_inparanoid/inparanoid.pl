@@ -1863,20 +1863,19 @@ sub do_blast_2pass {
 	# Bound both i/d temporary files to the composite query-database name.
 	$tmpi = "$tmpdir/i-$Fld[0]-$Fld[1]";
 	$tmpd = "$tmpdir/d-$Fld[0]-$Fld[1]";
-	print "tmpi $tmpi, tmpd $tmpd\n";
+	#print "tmpi $tmpi, tmpd $tmpd\n";
 
 	# Do second pass with compositional adjustment off to get full-length alignments.
 	print STDERR "\nStarting second BLAST pass for $Fld[0] - $Fld[1] on ";
 	system("date");
 	unlink "$Fld[4]";
 	foreach $aQuery (keys % theHits) {
-
 		# Create single-query file
 		open (FHT, ">$tmpi");
 		print FHT ">$aQuery\n".$sequencesA {">$aQuery"}."\n";
 		close (FHT);
 
-	    # Create mini-database of hit sequences
+		# Create mini-database of hit sequences
 		open (FHT, ">$tmpd");
 		foreach $aHit (split (/\s/, $theHits {$aQuery})) {
 			print FHT ">$aHit\n".$sequencesB {">$aHit"}."\n";
@@ -1885,6 +1884,11 @@ sub do_blast_2pass {
 
 		# Run Blast and add to output
 		system ("$formatdb -i $tmpd");
+		# TODO: instead of creating and writing to $tmpi, feed query sequence to blastall through stdin.
+		# see e.g. http://stackoverflow.com/questions/78091/how-can-i-capture-the-stdin-and-stdout-of-system-command-from-a-perl-script
+		# http://search.cpan.org/~rgarcia/perl-5.10.0/lib/IPC/Open2.pm
+		# possibly simpler solution example:
+		# open my $fh => "| cmd -option" or die $!; print $fh $str; close $fh or die $!;
 		system ("$blastall -C0 -FF -i $tmpi -d $tmpd -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff >> $Fld[4]");
 	}
 
