@@ -12,7 +12,7 @@ from multiprocessing import cpu_count, Queue, Process
 
 #print(sys.argv)
 if len(sys.argv) < 2:
-    print("At east one file with inparanoid commands must be provided!")
+    print("At least one file with inparanoid commands must be provided!")
     print("Example: %s commands_0.txt [commands_1.txt [...]]" % sys.argv[0])
     sys.exit(2)
 
@@ -46,7 +46,7 @@ del custom_inparanoid
 curr_path = getcwd()
 analysis = join(dirname(realpath(__file__)), '285_analysis')
 if not (exists(analysis) and isdir(analysis)):
-    print("Cannot find the 285_analysis directroy! Aborting!")
+    print("Cannot find the 285_analysis directory! Aborting!")
     sys.exit(3)
 
 
@@ -90,7 +90,7 @@ del _, p
 counter = 0 # serial number of the current task
 for infile in sys.argv[1:]:
     if not exists(infile):
-        print("%s does not exist, skipping")
+        print("%s does not exist, skipping" % infile)
         continue
     print("Processing %s." % infile)
     with open(infile) as inh:
@@ -103,12 +103,14 @@ for infile in sys.argv[1:]:
             args = fragments[2:]
             # formatdb input
             for f in args:
-                formatdb = ['formatdb', '-i', f]
-                out, err, retcode = execute(formatdb)
-                print('formatted %s: %s' % (f, ' '.join(formatdb)) )
-                if retcode != 0:
-                    print('formatdb returned %d: %r while formatting %r, full output follows:\n%s' %
-                          (retcode, err, f, out))
+                # first check if the formatdb file exists
+                if not exists(f + '.psq'):
+                    formatdb = ['formatdb', '-i', f]
+                    out, err, retcode = execute(formatdb)
+                    print('formatted %s: %s' % (f, ' '.join(formatdb)) )
+                    if retcode != 0:
+                        print('formatdb returned %d: %r while formatting %r, full output follows:\n%s' %
+                              (retcode, err, f, out))
             # populate the queue
             counter += 1
             tasks.put((counter, args)) # will block until all-qsize items are consumed
