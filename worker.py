@@ -76,7 +76,7 @@ def worker(tasks):
         print(' Done blast %s: %s' % (counter, ' '.join(blast)) )
         if retcode != 0:
             print('inparanoid returned %d: %r while blasting %r, full output follows:\n%s' %
-                          (retcode, err, ' and '.join(args), out) )
+                  (retcode, err, ' and '.join(args), out) )
 # 2. Start workers.
 workers = []
 for _ in range(num_workers):
