@@ -5,7 +5,6 @@ from __future__ import print_function
 import sys
 import os
 import subprocess
-import multiprocessing
 from os import getcwd, chdir, remove
 from os.path import join, dirname, realpath, isdir, exists
 from multiprocessing import cpu_count, Queue, Process
