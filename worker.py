@@ -11,10 +11,10 @@ from os.path import join, dirname, realpath, isdir, exists
 from multiprocessing import cpu_count, Queue, Process
 
 
-print(sys.argv)
-if len(sys.argv) < 1:
+#print(sys.argv)
+if len(sys.argv) < 2:
     print("At east one file with inparanoid commands must be provided!")
-    print("Example: ./%s commands_0.txt [commands_1.txt [commands_2.txt [...]]]" % sys.argv[0])
+    print("Example: %s commands_0.txt [commands_1.txt [...]]" % sys.argv[0])
     sys.exit(2)
 
 
@@ -39,7 +39,7 @@ def execute(commands, inputs = None):
 # Add custom_inparanoid to PATH.
 custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
 os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
-print('PATH after prepending custom_inparanoid: %s', os.environ['PATH'])
+#print('PATH after prepending custom_inparanoid: %s' % os.environ['PATH'])
 del custom_inparanoid
 
 
@@ -53,15 +53,16 @@ if not (exists(analysis) and isdir(analysis)):
 
 # Setup workers.
 num_workers = cpu_count()
-qsize = 100 * num_workers
+qsize = 10 * num_workers
 tasks = Queue(maxsize = qsize)
 # 1. Define worker.
-def worker(tasks, counter):
+def worker(tasks):
     'parallel worker for single command'
+    chdir(analysis)
     while True:
         try:
             # args: a list with 1 or 2 elements
-            args = tasks.get() # By default, there is no timeout.
+            counter, args = tasks.get() # By default, there is no timeout.
         except: # Queue.Empty
             print("worker(tasks) encountered an exception trying tasks.get()")
             raise
@@ -80,7 +81,7 @@ def worker(tasks, counter):
 # 2. Start workers.
 workers = []
 for _ in range(num_workers):
-    p = Process(target=worker, args=(tasks))
+    p = Process(target=worker, args=(tasks,))
     workers.append(p)
     p.start()
 del _, p
@@ -102,17 +103,16 @@ for infile in sys.argv[1:]:
             fragments = line.split(' ')
             args = fragments[2:]
             # formatdb input
-            formatdb = ['formatdb', '-i']
-            formatdb.extend(args)
-            print(formatdb)
-            out, err, retcode = execute(formatdb)
-            print('formatted %s: %s', ' and '.join(args), ' '.join(formatdb))
-            if retcode != 0:
-                print('formatdb returned %d: %r while formatting %r, full output follows:\n%s',
-                      retcode, err, ' and '.join(args), out)
+            for f in args:
+                formatdb = ['formatdb', '-i', f]
+                out, err, retcode = execute(formatdb)
+                print('formatted %s: %s' % (f, ' '.join(formatdb)) )
+                if retcode != 0:
+                    print('formatdb returned %d: %r while formatting %r, full output follows:\n%s' %
+                          (retcode, err, f, out))
             # populate the queue
             counter += 1
-            tasks.put(args, counter) # will block until all-qsize items are consumed
+            tasks.put((counter, args)) # will block until all-qsize items are consumed
         # change directory back to where we were
         chdir(curr_path)
     # delete the fully processed file
@@ -129,3 +129,5 @@ del _
 for p in workers:
     p.join()
 tasks.close()
+
+# TODO: cleanup all *.pin, *.psq, *.phr leftover files.
