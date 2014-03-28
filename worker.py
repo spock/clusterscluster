@@ -61,7 +61,7 @@ def worker(tasks):
     while True:
         try:
             # args: a list with 1 or 2 elements
-            counter, args = tasks.get() # By default, there is no timeout.
+            (counter, args) = tasks.get() # By default, there is no timeout.
         except: # Queue.Empty
             print("worker(tasks) encountered an exception trying tasks.get()")
             raise
@@ -117,14 +117,14 @@ for infile in sys.argv[1:]:
         # change directory back to where we were
         chdir(curr_path)
     # delete the fully processed file
-    print("Deleting %s." % infile)
-    remove(infile)
+#    print("Deleting %s." % infile)
+#    remove(infile)
 
 
 # 4. Add STOP messages.
 print("Adding %s STOP messages to task_queue." % num_workers)
 for _ in range(num_workers):
-    tasks.put(['STOP'])
+    tasks.put((0, ['STOP']))
 del _
 # 5. Wait for all processes to finish, close the queue.
 for p in workers:
