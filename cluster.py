@@ -1117,6 +1117,18 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     logging.debug("Populating the queue.")
     counter = 0
     for pair in permutations(faafiles, 2):
+        # First, formatdb input files.
+        for f in pair:
+            # Check if the formatdb file exists.
+            if not exists(f + '.psq'):
+                formatdb = ['formatdb', '-i', f]
+                out, err, retcode = utils.execute(formatdb)
+                if retcode != 0:
+                    logging.warning('formatdb returned %d: %r while formatting %r, full output follows:\n%s',
+                                    retcode, err, f, out)
+                else:
+                    logging.info('formatted %s: %s', f, ' '.join(formatdb) )
+                del formatdb, out, err, retcode
         counter += 1
         tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
     del pair, counter
