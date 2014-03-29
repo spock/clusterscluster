@@ -42,11 +42,11 @@ os.environ['PATH'] = custom_inparanoid + ':' + os.environ['PATH']
 del custom_inparanoid
 
 
-# Check that 285_analysis exists and is a directory.
+# Check that 285_analysis/inparanoid exists and is a directory.
 curr_path = getcwd()
-analysis = join(dirname(realpath(__file__)), '285_analysis')
+analysis = join(dirname(realpath(__file__)), '285_analysis', 'inparanoid')
 if not (exists(analysis) and isdir(analysis)):
-    print("Cannot find the 285_analysis directory! Aborting!")
+    print("Cannot find the 285_analysis/inparanoid directory! Aborting!")
     sys.exit(3)
 
 
