@@ -57,18 +57,24 @@ from lib import MultiParanoid as MP
 from lib.gb2fasta import gb2fasta
 from lib import utils
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
-# TODO: extension trimming will be implemented by modifying antismash2
-# configuration, obsoleting this import.
+# Extension trimming is implemented as --no-extensions in antismash2,
+# making this import obsolete.
 from lib import hmm_detection
 
 
 __all__ = []
-__version__ = 0.4
+__version__ = 0.5
 __date__ = '2013-07-10'
-__updated__ = '2014-03-20'
+__updated__ = '2014-03-31'
 
 
 def print_cluster_numbers_row(s2c, species, tee):
+    '''
+    Print a row of tab-separated cluster numbers.
+    s2c: species to clusters dict
+    species: list of identifiers
+    tee: file-like handle
+    '''
     first = True
     for s in species:
         if first:
@@ -81,15 +87,21 @@ def print_cluster_numbers_row(s2c, species, tee):
 
 
 def parse_cluster_number(note):
-    '''Given a list of items from the "note" field of the GenBank feature,
-    created by Antismash2, return cluster number.'''
+    '''
+    Given a list of items from the "note" field of the GenBank feature,
+    created by Antismash2, return cluster number.
+    '''
     for i in note:
         if i.startswith('Cluster number: '):
             return int(i[16:])
 
 
 def print_species_header(species, tee):
-    'Print table header.'
+    '''
+    Print table header: a row of tab-separated genome identifiers
+    species: list of identifiers
+    tee: file-like handle
+    '''
     first = True
     for s in species:
         if first:
@@ -128,18 +140,19 @@ def bin_key(weight):
 #
 
 def get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
-    '''For the given gene,
-    - find to which orthology group/cluster it belongs,
+    '''
+    For the given `gene`,
+    - find to which orthology group/cluster from `mp` it belongs,
     - check if other genes from that group are a part of some biosynthetic clusters,
-    - return the list of those biosynthetic clusters'''
+    - return the list of those biosynthetic clusters
+    '''
     if gene not in mp.gene2ortho:
-        return []
+        return [] # `gene` does not belong to any group of orthologs
     bioclusters = []
     for orthoclust in mp.gene2ortho[gene]:
         logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
         for xeno_gene in mp.ortho2genes[orthoclust]:
             # Extract LOCUS from gene name, find species from it.
-            #xeno_species = inputs[xeno_gene.rsplit('.')[-1]]
             xeno_species = xeno_gene.rsplit(':')[-1]
             # Check if xeno_gene belongs to any biosynthetic clusters.
             if xeno_gene in gene2clusters[xeno_species]:
@@ -150,8 +163,10 @@ def get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
 
 
 def calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs):
-    '''Given biosynthetic clusters c1 and c2, count the number of unique
-    orthologoues gene pairs ("links") between them.'''
+    '''
+    Given biosynthetic clusters c1 and c2, count the number of unique
+    orthologoues gene pairs ("links") between them.
+    '''
     links = 0
     for gene in cluster2genes[c1[0]][c1[1]]:
         if c2 in get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
@@ -161,8 +176,10 @@ def calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs):
 
 def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
                      numbers2products, mp, gene2clusters, args, inputs):
-    '''Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
-    link between them.'''
+    '''
+    Given 2 biosynthetic clusters - c1 and c2 - calculate the weight of the
+    link between them.
+    '''
     c1_genes = len(cluster2genes[c1[0]][c1[1]])
     c2_genes = len(cluster2genes[c2[0]][c2[1]])
     links1 = float(min(calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs), c1_genes))
@@ -214,6 +231,8 @@ def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
     if args.scale:
         weight2 = weight * min(size1, size2) / max(size1, size2)
         logging.debug('\tscaled weight %s to %s', round(weight, 2), round(weight2, 2))
+        weight = weight2
+        del weight2
     try:
         assert weight <= 1.0001 # precision allowance
     except:
@@ -222,7 +241,7 @@ def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
                           links1, links2, c1_genes, c2_genes)
         raise
     if weight >= args.threshold:
-        if c1[0] == c2[0]:
+        if c1[0] == c2[0]: #intra-species link
             intra_one.append((c1, numbers2products[c1[0]][c1[1]],
                               len(cluster2genes[c1[0]][c1[1]]), clustersizes[c1],
                               c2, numbers2products[c2[0]][c2[1]],
@@ -238,9 +257,11 @@ def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
 
 
 def get_unique_clusters(s, cluster2genes, weights_clean, allowed_species = False):
-    '''returns the quantity of unique clusters in the provided species "s".
+    '''
+    Return the quantity of unique clusters in the provided species "s".
     Linked clusters must be from "allowed_species", if specified;
-    otherwise, all species are searched for linked clusters.'''
+    otherwise, all species are searched for linked clusters.
+    '''
     # Counter of non-unique clusters.
     non_unique = 0
     for u in cluster2genes[s]:
@@ -285,8 +306,10 @@ def graph_unique_change_when_adding(species, cluster2genes, weights_clean, rever
         print('%s\t%s\t%s' % (bar, ratio, s))
 
 def cumulative_growth(species, cluster2genes, weights_clean, reverse = True):
-    '''Shows expected and observed growth of the number of unique clusters
-    with each new genome'''
+    '''
+    Show expected and observed growth of the number of unique clusters
+    with each new added genome.
+    '''
     print('Graph of the ratio of observed/expected total unique clusters.')
     if not reverse:
         print('(reversed: from genomes with less clusters to genomes with more)')
@@ -306,7 +329,7 @@ def cumulative_growth(species, cluster2genes, weights_clean, reverse = True):
     height = 90
     # Draw a reference 100% line.
     print('%s\t%s\t%s' % ('#' * height, 1.0, 'Reference'))
-    for (numclust, s) in numclust_species:
+    for (_, s) in numclust_species:
         total_expected += len(cluster2genes[s])
         total_observed += get_unique_clusters(s, cluster2genes, weights_clean)
         ratio = round(float(total_observed) / total_expected, 2)
@@ -536,7 +559,7 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
                                      start, end, end-start)
             logging.debug('\tAssign genes to biosynthetic clusters')
             num_genes = 0
-            for r in records: # genbank is a list of records from above
+            for r in records:
                 record_number = records.index(r)
                 for f in r.features:
                     if f.type == 'CDS':
@@ -641,24 +664,19 @@ def process(inputs, paranoid, args):
     '''
     Analyze quickparanoid results. 'args' contains:
     "paranoid" is the path to quickparanoid output file.
-    "paths" is a list of paths to genbank files we want to compare.
-    "threshold" is a biocluster-biocluster link weight threshold.
-    "prefix" is prepended to all output files.
-    "trim", if True, causes antismash2 clusters to lose non-core extensions at
+    "args.paths" is a list of paths to genbank files we want to compare.
+    "args.threshold" is a biocluster-biocluster link weight threshold.
+    "args.prefix" is prepended to all output files.
+    "args.trim", if True, causes antismash2 clusters to lose non-core extensions at
     both ends of the cluster (these are hard-coded in antismash2). Note that for composite-type
     clusters only the shorter of the extensions will be trimmed (e.g. bacteriocin extension
     for the backteriocin-t1pks cluster).
-    "skipp" means "skip putative clusters", if set.
-    "no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
-    "no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
-    "use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
-    "scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).
+    "args.skipp" means "skip putative clusters", if set.
+    "args.no_tree_problems", if True, will only use orthology clusters which do not have any problems in the tree_conflict column.
+    "args.no_name_problems": as above, but only for the 'diff. names' problem in the tree_conflict column.
+    "args.use_sizes" will weigh each clusters contribution to final weight according to clusters length proportion of total length, in bp.
+    "args.scale" will scale down weight by the ratio of physical cluster lengths: min(size1, size2)/max(size1, size2).
     '''
-    # FIXME: re-think this entire function.
-    # TODO: modularize?...
-    # TODO: replace species with either inputs.keys() or faafiles.
-    # TODO: replace paths with args.paths, or inputs?
-    # TODO: replace 'trim' support with no-extensions support (?).
     # TODO: deprecate skipp? (can be filtered out at the analysis step)
 
     mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
@@ -674,6 +692,7 @@ def process(inputs, paranoid, args):
     coords2numbers = {}
     # 2-level nested dict of cluster pairs link weights,
     # e.g. cluster_weights['A'] = {'B': 0.95, ...}
+    # TODO: replace with numpy matrix/array
     cluster_weights = {}
     # Same as above, but without duplicate links to other species.
     weights_clean = {}
@@ -732,7 +751,7 @@ def process(inputs, paranoid, args):
 
 
     # Manual data examination had shown that many multi-links between species
-    # have high scores of up 1.0. Removing them may adversely affect the
+    # have high scores of up to 1.0. Removing them may adversely affect the
     # estimation of new clusters potential. This is why multi-link resolution
     # is commented out below.
 #    print 'Resolving multi-maps to single species by weight, and removing intra-species links.'
@@ -947,6 +966,8 @@ def preprocess_input_files(inputs, args):
             # antismash's algorithm for naming the output file:
             # basename = seq_records[0].id
             # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
+            # However, seq_records[0].id can be dot-truncated by BioPython to length 12;
+            # thus using wildcard match.
 #            logging.debug('as2file (target): %s', as2file)
             antismash2_file = glob.glob(join(output_folder, '*.final.gbk'))[0]
 #            logging.debug('antismash2 file (source): %s', antismash2_file)
@@ -964,7 +985,7 @@ def preprocess_input_files(inputs, args):
         del as2file, fnafile, faafile, infile
         del contigs, genome_size, organism, primary_accession, accessions
         del ids, primary_id
-    # When all the workers have finished: make sure they exit, using a keyword.
+
 
 def prepare_inparanoid(inputs, args):
     '''
@@ -976,7 +997,6 @@ def prepare_inparanoid(inputs, args):
     for _ in inputs.itervalues():
         faafiles.append(basename(_['faafile']))
     del _
-#    faafiles.sort(key = lambda s: s.lower())
     faafiles.sort(key = lambda s: s.lower())
 
     # Put everything inparanoid-related into a subdir.
@@ -1012,7 +1032,6 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     else:
         num_workers = cpu_count()
     qsize = 100 * num_workers
-
 
     total_genomes = len(faafiles)
     if not emulate_inparanoid:
