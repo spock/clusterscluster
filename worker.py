@@ -5,6 +5,7 @@ from __future__ import print_function
 import sys
 import os
 import subprocess
+from time import asctime, sleep
 from os import getcwd, chdir, remove
 from os.path import join, dirname, realpath, isdir, exists
 from multiprocessing import cpu_count, Queue, Process
@@ -71,12 +72,14 @@ def worker(tasks):
             break
         blast = ['inparanoid.pl', '--blast-only']
         blast.extend(args)
-        print('Start blast %s: %s' % (counter, ' '.join(blast)) )
+        print(asctime(), 'start # %s: %s' % (counter, '-'.join(args)) )
         out, err, retcode = execute(blast)
-        print(' Done blast %s: %s' % (counter, ' '.join(blast)) )
+        print(asctime(), ' done # %s: %s' % (counter, '-'.join(args)) )
         if retcode != 0:
             print('inparanoid returned %d: %r while blasting %r, full output follows:\n%s' %
                   (retcode, err, ' and '.join(args), out) )
+        # cooldown
+        #sleep(30)
 # 2. Start workers.
 workers = []
 for _ in range(num_workers):
