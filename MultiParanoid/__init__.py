@@ -7,8 +7,6 @@ from __future__ import print_function
 import csv
 import logging
 
-# debug, info, warning, error, critical
-
 
 class MultiParanoid(object):
     '''

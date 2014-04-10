@@ -53,7 +53,7 @@ from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations
 
-from lib import MultiParanoid as MP
+import MultiParanoid as MP
 from lib.gb2fasta import gb2fasta
 from lib import utils
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
@@ -661,6 +661,7 @@ def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
 #
 
 def process(inputs, paranoid, args):
+    # TODO: simplify, split up this function
     '''
     Analyze quickparanoid results. 'args' contains:
     "paranoid" is the path to quickparanoid output file.
@@ -695,7 +696,7 @@ def process(inputs, paranoid, args):
     # TODO: replace with numpy matrix/array
     cluster_weights = {}
     # Same as above, but without duplicate links to other species.
-    weights_clean = {}
+    weights_clean = {} # ????
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
     # Dict of per-species dicts of cluster-to-gene relations.
@@ -858,7 +859,6 @@ def preprocess_input_files(inputs, args):
     # - linear processing of genbank IDs
     # - parallel conversion/translation extraction/antismashing
     for infile in args.paths:
-        # TODO: convert this to a worker to run in parallel.
         contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
         genome_size = 0 # total size of all contigs
         organism = {} # maps accessions to 'organism' field
@@ -951,7 +951,7 @@ def preprocess_input_files(inputs, args):
             # Removed unnecessary options: --full-blast, --full-hmmer.
             # TODO: when this part is properly parallelized, set --cpus to 1?
             as2_options.extend(['--cpus', str(cpu_count()), '--verbose', '--all-orfs'])
-            as2_options.extend(['--input-type', 'nucl'])
+            as2_options.extend(['--input-type', 'nucl', '--inclusive'])
             if args.no_extensions:
                 # TODO: make this warning be shown only once, similar to args.antismash_warning_shown
                 logging.warning("using --no-extensions option; cluster.py DOES NOT check if this option is supported!")
@@ -1015,6 +1015,7 @@ def prepare_inparanoid(inputs, args):
     return inparanoidir, faafiles
 
 def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
+    # TODO: make this into Inparanoid class, join with prepare_inparanoid.
     # Prepend custom_inparanoid path to PATH, so that it is used first.
     # alternative path finding method: dirname(sys.argv[0])
     custom_inparanoid = join(dirname(realpath(__file__)), 'custom_inparanoid')
