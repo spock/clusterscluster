@@ -462,8 +462,6 @@ def process(inputs, paranoid, args):
     species = inputs.keys()
     # List of all clusters from all species.
     all_clusters = []
-    # Map of per-species cluster numbers to their products
-    numbers2products = {}
     # 2-level nested dict of cluster pairs link weights,
     # e.g. cluster_weights['A'] = {'B': 0.95, ...}
     # TODO: replace with numpy matrix/array
@@ -472,16 +470,9 @@ def process(inputs, paranoid, args):
     weights_clean = {} # ????
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
-    # Dict of per-species dicts of cluster-to-gene relations.
-    # Each cluster dict uses a key = (species, number).
-    cluster2genes = {}
-    # Inverse of the above: per-species mapping of each gene to the cluster(s) it belongs to.
-    gene2clusters = {}
     # Two lists of 2-tuples with weight > threshold links between clusters.
     intra_one = []
     inter_one = []
-    # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
-    clustersizes = {}
 
     print('Constructing gene-based cluster links.')
     pairs = combinations(all_clusters, 2)
@@ -669,7 +660,7 @@ def prepare_inparanoid(inputs, args):
     # Collect all faafile names into a list without paths.
     faafiles = []
     for _ in inputs.itervalues():
-        faafiles.append(basename(_['faafile']))
+        faafiles.append(basename(_.faafile))
     del _
     faafiles.sort(key = lambda s: s.lower())
 
@@ -680,13 +671,13 @@ def prepare_inparanoid(inputs, args):
 
     # Symlink all faa files there.
     for _ in faafiles:
-        # TODO: can parallelize.
         linkname = join(inparanoidir, _)
         if not (args.force and exists(linkname)):
             symlink(join('..', _), linkname)
     del linkname, _
 
     return inparanoidir, faafiles
+
 
 def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     # TODO: make this into Inparanoid class, join with prepare_inparanoid.
@@ -765,7 +756,6 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         p.join()
     tasks.close()
     del p, total_genomes, workers
-
 
     total_permutations = len(list(permutations(faafiles, 2)))
     tasks = Queue(maxsize = qsize)
