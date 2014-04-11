@@ -45,7 +45,7 @@ import glob
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
-from shutil import rmtree, move
+from shutil import move
 from argparse import ArgumentParser
 from Bio import SeqIO
 from Bio.Alphabet import generic_dna#, generic_protein
@@ -53,10 +53,8 @@ from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations
 
-import MultiParanoid as MP
-from lib.gb2fasta import gb2fasta
+import MultiParanoid
 from lib import utils
-from lib.extract_translation_from_genbank import extract_translation_from_genbank
 # Extension trimming is implemented as --no-extensions in antismash2,
 # making this import obsolete.
 from lib import hmm_detection
@@ -680,7 +678,7 @@ def process(inputs, paranoid, args):
     '''
     # TODO: deprecate skipp? (can be filtered out at the analysis step)
 
-    mp = MP.MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
+    mp = MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
 
     # Declare important variables.
     # List of recognized species IDs.
@@ -859,45 +857,8 @@ def preprocess_input_files(inputs, args):
     # - linear processing of genbank IDs
     # - parallel conversion/translation extraction/antismashing
     for infile in args.paths:
-        contigs = 0 # number of fragments of the genome (can be contigs, plasmids, chromosomes, etc)
-        genome_size = 0 # total size of all contigs
-        organism = {} # maps accessions to 'organism' field
-        primary_accession = '' # for the accession of the longest record
-        primary_id = '' # as above
-        primary_length = 0 # current primary accession sequence length
-        accessions = [] # other accessions, e.g. plasmids/contigs/etc
-        ids = [] # as above
-        # Extract key information.
-        for r in SeqIO.parse(infile, 'genbank', generic_dna):
-            # r.name is an accession (e.g. AF080235),
-            # r.id is a versioned accession (e.g. AF080235.1)
-            # We use r.id as more specific.
-            logging.debug('record name and ID are %s and %s', r.name, r.id)
-            if not r.id or r.id == '':
-                logging.error('Genome %s has no usable ID!' % input)
-                raise Exception('GenomeHasNoIDError')
-            contigs += 1
-            accessions.append(r.name)
-            ids.append(r.id)
-            organism[r.name] = r.annotations['organism']
-            if primary_id == '':
-                primary_accession = r.name
-                primary_id = r.id
-                primary_length = len(r.seq)
-            elif len(r.seq) > primary_length:
-                primary_accession = r.name
-                primary_id = r.id
-                primary_length = len(r.seq)
-            genome_size += len(r.seq)
-        if '-' in primary_id:
-            logging.error('quickparanoid allows no dashes in filenames; genome "%s" has a dash!',
-                          primary_id)
-            raise Exception('DashesInIDsAreForbiddenError')
-        del primary_length, r
-        # Remove primary accession from the list of all accessions.
-        accessions.remove(primary_accession)
-        ids.remove(primary_id)
-
+        # FIXME
+        inputs[primary_id] = {}
         # Check for duplicate ID.
         if primary_id in inputs:
             # Check for an exact duplicate.
@@ -916,75 +877,6 @@ def preprocess_input_files(inputs, args):
                     else:
                         primary_id = new_id
                         del new_id
-
-        # TODO: comment out or remove unneeded fields when the program is finished.
-        inputs[primary_id] = {}
-        inputs[primary_id]['contigs'] = contigs
-        inputs[primary_id]['genome_size'] = genome_size
-        inputs[primary_id]['infile'] = infile
-        inputs[primary_id]['species'] = organism[primary_accession]
-        inputs[primary_id]['accessions'] = accessions
-        inputs[primary_id]['ids'] = ids
-
-        # Write FASTA to ID.fna, do nothing if file exists.
-        fnafile = join(args.project, primary_id + '.fna')
-        inputs[primary_id]['fnafile'] = fnafile
-        gb2fasta(infile, fnafile, primary_id)
-
-        # Re-use antismash2 annotation if it exists.
-        as2file = join(args.project, primary_id + '.gbk')
-        inputs[primary_id]['as2file'] = as2file
-        antismash2_reused = False
-        if args.force and exists(as2file):
-            if not args.antismash_warning_shown:
-                args.antismash_warning_shown = True
-                logging.warning('Reusing existing antismash2 annotation(s).')
-                logging.warning('\t--no-extensions option will NOT be honored!')
-                logging.warning('\tDo not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
-            # Re-using any further files is only possible if we do re-use antismash files.
-            antismash2_reused = True
-        else:
-            output_folder = join(args.project, primary_id)
-            as2_options = ['run_antismash', '--outputfolder', output_folder]
-            # Removed time-consuming/unnecessary options: smcogs, clusterblast,
-            # subclusterblast.
-            # Removed unnecessary options: --full-blast, --full-hmmer.
-            # TODO: when this part is properly parallelized, set --cpus to 1?
-            as2_options.extend(['--cpus', str(cpu_count()), '--verbose', '--all-orfs'])
-            as2_options.extend(['--input-type', 'nucl', '--inclusive'])
-            if args.no_extensions:
-                # TODO: make this warning be shown only once, similar to args.antismash_warning_shown
-                logging.warning("using --no-extensions option; cluster.py DOES NOT check if this option is supported!")
-                as2_options.append('--no-extensions')
-            as2_options.append(fnafile)
-            logging.info('Running antismash2: %s', ' '.join(as2_options))
-            # TODO: show output from child processes?...
-            out, err, retcode = utils.execute(as2_options)
-            if retcode != 0:
-                logging.debug('antismash2 returned %d: %r while scanning %r',
-                              retcode, err, fnafile)
-            # antismash's algorithm for naming the output file:
-            # basename = seq_records[0].id
-            # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
-            # However, seq_records[0].id can be dot-truncated by BioPython to length 12;
-            # thus using wildcard match.
-#            logging.debug('as2file (target): %s', as2file)
-            antismash2_file = glob.glob(join(output_folder, '*.final.gbk'))[0]
-#            logging.debug('antismash2 file (source): %s', antismash2_file)
-            move(antismash2_file, as2file)
-            rmtree(output_folder)
-            inputs[primary_id]['as2file'] = as2file
-            del output_folder, out
-
-        faafile = join(args.project, primary_id + '.faa')
-        inputs[primary_id]['faafile'] = faafile
-        if antismash2_reused and args.force and exists(faafile):
-            logging.debug('Reusing existing translations file.')
-        else:
-            extract_translation_from_genbank(as2file, faafile, False)
-        del as2file, fnafile, faafile, infile
-        del contigs, genome_size, organism, primary_accession, accessions
-        del ids, primary_id
 
 
 def prepare_inparanoid(inputs, args):
