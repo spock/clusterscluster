@@ -47,23 +47,18 @@ from os import mkdir, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
 from shutil import move
 from argparse import ArgumentParser
-from Bio import SeqIO
-from Bio.Alphabet import generic_dna#, generic_protein
-from bx.intervals.intersection import Interval, IntervalTree
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations
 
 import MultiParanoid
+import Genome
 from lib import utils
-# Extension trimming is implemented as --no-extensions in antismash2,
-# making this import obsolete.
-from lib import hmm_detection
 
 
 __all__ = []
-__version__ = 0.5
+__version__ = 0.6
 __date__ = '2013-07-10'
-__updated__ = '2014-03-31'
+__updated__ = '2014-04-11'
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -82,16 +77,6 @@ def print_cluster_numbers_row(s2c, species, tee):
         if s in s2c:
             tee.write(str(s2c[s]))
     tee.write('\n')
-
-
-def parse_cluster_number(note):
-    '''
-    Given a list of items from the "note" field of the GenBank feature,
-    created by Antismash2, return cluster number.
-    '''
-    for i in note:
-        if i.startswith('Cluster number: '):
-            return int(i[16:])
 
 
 def print_species_header(species, tee):
@@ -446,214 +431,6 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
         # looks just like the above weights table, but now only clusters from single
         # species are used.
 
-
-def parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
-                                 numbers2products, coords2numbers, clustersizes,
-                                 all_clusters):
-    '''
-    All of: cluster2genes, gene2clusters, numbers2products, coords2numbers,
-            clustersizes, all_clusters
-    will be updated upon execution of this function.
-    '''
-    rulesdict = hmm_detection.create_rules_dict()
-    logging.info('Parsing genbank files in parallel.')
-    task_queue = Queue() # record.id + path to antismashed genbank, or 'STOP'.
-    done_queue = Queue()
-
-    # Parallel worker.
-    def worker(tasks, done, rulesdict):
-        while True:
-            try:
-                # k = record.id, gb = path to antismash2 genbank file
-                (k, gb) = tasks.get() # By default, there is no timeout.
-            except: # Queue.Empty
-                logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
-                raise
-            # Exit if 'STOP' element is found.
-            if gb == 'STOP':
-                logging.debug("STOP found, exiting.")
-                break
-            # Dict of per-SeqRecord Interval trees of clusters, i.e.
-            # clustertrees[record_number] = IntervalTree()
-            clustertrees = {}
-            # List of all records.
-            records = list(SeqIO.parse(gb, "genbank", generic_dna))
-            # TODO: all the parallel output will get mangled, consider suppressing/removing.
-            print('Parsing clusters and assigning genes to them in %s (%s):' %
-                  (k, inputs[k]['species']))
-            if args.trim:
-                logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
-                logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
-            # Local-only dictionaries/lists to be merged by the parent function.
-            cluster2genes_l = {}
-            numbers2products_l = {}
-            coords2numbers_l = {}
-            gene2clusters_l = {}
-            clustersizes_l = {}
-            all_clusters_l = []
-            # Populate clusters tree and dict with (start, end) as keys.
-            for r in records:
-                record_number = records.index(r)
-                clustertrees[record_number] = IntervalTree()
-                for f in r.features:
-                    if f.type == 'cluster':
-                        cluster_number = parse_cluster_number(f.qualifiers['note'])
-                        start = int(f.location.start.position)
-                        end = int(f.location.end.position)
-                        if args.skipp and f.qualifiers['product'][0] == 'putative':
-                            logging.debug('\tskipping putative cluster #%s at (%s, %s)',
-                                          cluster_number, start, end)
-                            continue
-                        # Putative clusters have neither extensions nor rules for them.
-                        if args.trim and f.qualifiers['product'][0] != 'putative':
-                            # Use cluster type to get extension size, including composite types.
-                            extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0],
-                                                                                         rulesdict)
-                            # If cluster is shorter than double extension, do not trim.
-                            if 2 * extension >= (end - start):
-                                logging.info('\tnot trimming #%s (%s) - shorter than double extension 2 * %s',
-                                             cluster_number, f.qualifiers['product'][0],
-                                             extension)
-                            else:
-                                # If cluster is at the genome edge - skip extension trimming.
-                                if start == 0:
-                                    logging.info('\tnot trimming left-extension for #%s (%s) - at the genome start',
-                                                 cluster_number, f.qualifiers['product'][0])
-                                else:
-                                    start += extension
-                                if end == len(r):
-                                    logging.info('\tnot trimming right-extension for #%s (%s) - at the genome end',
-                                                 cluster_number, f.qualifiers['product'][0])
-                                else:
-                                    end -= extension
-                                try:
-                                    assert start < end
-                                except:
-                                    logging.exception('trimming extension failed for: %s (%s), extension %s, ori start %s, new start %s, ori end %s, new end %s',
-                                                      f.qualifiers['product'][0],
-                                                      cluster_number, extension,
-                                                      f.location.start.position,
-                                                      start,
-                                                      f.location.end.position,
-                                                      end)
-                                    raise
-                        clustertrees[record_number].add_interval(Interval(start,
-                                                                          end))
-                        cluster2genes_l[cluster_number] = []
-                        all_clusters_l.append((k, cluster_number))
-                        numbers2products_l[cluster_number] = f.qualifiers['product'][0]
-                        # Start/end coords theoretically can collide between
-                        # multiple loci of the same genome: check for this.
-                        try:
-                            assert (start, end) not in coords2numbers_l
-                        except:
-                            logging.exception("Cluster %s coordinates (%s, %s) collision in %s.",
-                                              cluster_number, start, end, k)
-                            raise
-                        coords2numbers_l[(start, end)] = cluster_number
-                        clustersizes_l[(k, cluster_number)] = end - start
-                        logging.info('''\t('%s', %s): %s [%s, %s], %s bp long''',
-                                     k, cluster_number, f.qualifiers['product'][0],
-                                     start, end, end-start)
-            logging.debug('\tAssign genes to biosynthetic clusters')
-            num_genes = 0
-            for r in records:
-                record_number = records.index(r)
-                for f in r.features:
-                    if f.type == 'CDS':
-                        # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
-                        cl = clustertrees[record_number].find(int(f.location.start.position),
-                                                              int(f.location.end.position))
-                        if len(cl) > 0:
-                            # Determine which qualifier type to use for gene name.
-                            if 'locus_tag' in f.qualifiers:
-                                qualifier = 'locus_tag'
-                            elif 'gene' in f.qualifiers:
-                                qualifier = 'gene'
-                            gene_name = f.qualifiers[qualifier][0] + ':' + k
-                            # Check for gene_name overlaps between loci.
-                            try:
-                                assert gene_name not in gene2clusters_l
-                            except:
-                                logging.exception("%s is not unique across the records of %s.",
-                                                  gene_name, k)
-                                raise
-                            # One gene may belong to more than one cluster.
-                            logging.debug('\t\tgene at (%s, %s) overlaps with %s cluster(s), 1st is at (%s, %s)',
-                                          f.location.start.position,
-                                          f.location.end.position, len(cl),
-                                          cl[0].start, cl[0].end)
-                            num_genes += 1
-                            gene2clusters_l[gene_name] = []
-                            for cluster in cl:
-                                cluster2genes_l[coords2numbers_l[(cluster.start, cluster.end)]].append(gene_name)
-                                gene2clusters_l[gene_name].append((k, coords2numbers_l[(cluster.start, cluster.end)]))
-                            del gene_name
-            print('\t%s: %s clusters populated with %s genes' % (k,
-                                                                 len(cluster2genes_l),
-                                                                 num_genes))
-            done.put((k, cluster2genes_l, numbers2products_l, coords2numbers_l,
-                      gene2clusters_l, all_clusters_l, clustersizes_l))
-            del num_genes, clustertrees, records, cluster2genes_l, all_clusters_l
-            del numbers2products_l, coords2numbers_l, gene2clusters_l, clustersizes_l
-
-    species = inputs.keys()
-    species_count = len(species)
-    workers = min(cpu_count(), species_count)
-    workers_list = []
-    logging.info("Starting %s GenBank parse workers.", workers)
-    for _ in range(workers):
-        p = Process(target=worker, args=(task_queue, done_queue, rulesdict))
-        workers_list.append(p)
-        p.start()
-    del _
-
-    logging.debug("Putting ID-path tuples into task_queue")
-    for k, v in inputs.iteritems():
-        # submit record.id and /path/to/genbank
-        task_queue.put((k, v['as2file']))
-    del k, v
-
-    logging.debug("Adding %s STOP messages to task_queue.", workers)
-    for _ in range(workers):
-        task_queue.put((0, 'STOP'))
-    del _, workers
-
-    logging.debug("Reading from the done_queue.")
-    for _ in range(species_count):
-        k, cluster2genes_l, numbers2products_l, coords2numbers_l, gene2clusters_l, all_clusters_l, clustersizes_l = done_queue.get()
-        cluster2genes[k] = cluster2genes_l
-        gene2clusters[k] = gene2clusters_l
-        numbers2products[k] = numbers2products_l
-        coords2numbers[k] = coords2numbers_l
-        clustersizes.update(clustersizes_l) # clustersizes[(k, cluster_number)]
-        all_clusters.extend(all_clusters_l)
-    del _, k, cluster2genes_l, numbers2products_l, coords2numbers_l
-    del gene2clusters_l, all_clusters_l, clustersizes_l
-
-    # join() the processes
-    for p in workers_list:
-        p.join()
-    del p, workers_list
-
-    task_queue.close()
-    done_queue.close()
-
-    # Extra verification.
-    for k in species:
-        for num, cl in cluster2genes[k].iteritems():
-            try:
-                assert len(cl) > 0
-            except:
-                logging.exception('cluster %s of %s has 0 genes', num, k)
-                raise
-    print('\tadded %s clusters from %s species' % (len(all_clusters), species_count))
-    # Sort by species.lower() to ensure stable order of cluster pairs.
-    # FIXME: to implement proper sorting, may need to use faafiles instead of r.id as s/species.
-    all_clusters.sort(key = lambda s: s[0].lower())
-
-    del species, species_count, rulesdict
-
 #
 # /Set of functions used by process()
 #
@@ -687,8 +464,6 @@ def process(inputs, paranoid, args):
     all_clusters = []
     # Map of per-species cluster numbers to their products
     numbers2products = {}
-    # Per-species mapping of cluster coordinates tuple to their numbers.
-    coords2numbers = {}
     # 2-level nested dict of cluster pairs link weights,
     # e.g. cluster_weights['A'] = {'B': 0.95, ...}
     # TODO: replace with numpy matrix/array
@@ -707,12 +482,6 @@ def process(inputs, paranoid, args):
     inter_one = []
     # Sizes of clusters, in basepairs. clustersizes[(species, number)] = 65450
     clustersizes = {}
-
-    # Read genbank files, assign genes to clusters, clusters to genes, and
-    # fill other useful maps and lists.
-    parse_gene_cluster_relations(inputs, args, cluster2genes, gene2clusters,
-                                 numbers2products, coords2numbers, clustersizes,
-                                 all_clusters)
 
     print('Constructing gene-based cluster links.')
     pairs = combinations(all_clusters, 2)
@@ -850,33 +619,46 @@ def process(inputs, paranoid, args):
 
 def preprocess_input_files(inputs, args):
     '''
-    inputs: dictionary to populate
+    inputs: dictionary to populate with Genomes
     args.paths: list of genbank files to process
     '''
-    # TODO: split into 2 parts:
-    # - linear processing of genbank IDs
-    # - parallel conversion/translation extraction/antismashing
     for infile in args.paths:
-        # FIXME
-        inputs[primary_id] = {}
+        g = Genome(infile, args.project)
         # Check for duplicate ID.
-        if primary_id in inputs:
+        if g.id in inputs:
             # Check for an exact duplicate.
-            if (inputs[primary_id]['contigs'] == contigs and
-                inputs[primary_id]['genome_size'] == genome_size and
-                inputs[primary_id]['species'] == organism[primary_accession]):
+            if (inputs[g.id].contigs == g.contigs and
+                inputs[g.id].genome_size == g.genome_size and
+                inputs[g.id].species == g.species):
                 logging.error('Found identical genomes of "%s" with ID %s, %s bp long (in %s fragments).',
-                              organism[primary_accession], primary_id, genome_size, contigs)
+                              g.species, g.id, g.genome_size, g.contigs)
                 raise Exception('IdenticalGenomesError')
             else:
                 logging.debug('Append _1, _2 etc to the ID until it becomes unique.')
                 for i in range(1, 10):
-                    new_id = primary_id + '_' + str(i)
+                    new_id = g.id + '_' + str(i)
                     if new_id in inputs:
                         continue
                     else:
-                        primary_id = new_id
+                        g.id = new_id
                         del new_id
+        # TODO: can possibly parallelize gb2fna, antismashing (cores = 1),
+        # as2faa, and gene-cluster parsing.
+        # Processing.
+        g.gb2fna()
+        g.run_antismash(args.force, args.antismash_warning_shown,
+                        args.no_extensions)
+        args.antismash_warning_shown = g.antismash_warning_shown
+        # Do not process further zero-cluster genomes.
+        if g.num_clusters == 0:
+            logging.info('%s (%s) has zero clusters, removing from further analysis',
+                         g.species, g.id)
+            continue
+        g.as2faa(args.force)
+        # FIXME: make this run in parallel
+        g.parse_gene_cluster_relations(args)
+        # Add to the dict of all genomes.
+        inputs[g.id] = g
 
 
 def prepare_inparanoid(inputs, args):
@@ -1289,8 +1071,8 @@ def main():
     else: # create
         mkdir(args.project)
 
-    # "Catalog" all input files.
-    inputs = {} # Map genome ID to other properties.
+    # "Catalog" all genomes.
+    inputs = {} # Map genome ID to Genome object.
 
     if len(args.paths) == 1:
         logging.warning("Single input file specified, program will exit after preprocessing.")
