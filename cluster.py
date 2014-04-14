@@ -613,6 +613,34 @@ def preprocess_input_files(inputs, args):
     inputs: dictionary to populate with Genomes
     args.paths: list of genbank files to process
     '''
+    task_queue = Queue()
+    done_queue = Queue()
+
+    def worker():
+        while True:
+            try:
+                # g = Genome object
+                g = task_queue.get() # By default, there is no timeout.
+            except: # Queue.Empty
+                logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
+                raise
+            # Exit if 'STOP' element is found.
+            if g == 'STOP':
+                logging.debug("STOP found, exiting.")
+                break
+            g.gb2fna()
+            g.run_antismash(args.force, args.antismash_warning_shown,
+                            args.no_extensions, cores = 1)
+            args.antismash_warning_shown = g.antismash_warning_shown
+            # Do not process zero-cluster genomes.
+            if g.num_clusters == 0:
+                logging.info('%s (%s) has zero clusters, removing from further analysis',
+                             g.species, g.id)
+                continue
+            g.as2faa(args.force)
+            g.parse_gene_cluster_relations(args)
+            done_queue.put(g)
+
     for infile in args.paths:
         g = Genome(infile, args.project)
         # Check for duplicate ID.
@@ -633,23 +661,38 @@ def preprocess_input_files(inputs, args):
                     else:
                         g.id = new_id
                         del new_id
-        # TODO: can possibly parallelize gb2fna, antismashing (cores = 1),
-        # as2faa, and gene-cluster parsing.
-        # Processing.
-        g.gb2fna()
-        g.run_antismash(args.force, args.antismash_warning_shown,
-                        args.no_extensions)
-        args.antismash_warning_shown = g.antismash_warning_shown
-        # Do not process further zero-cluster genomes.
-        if g.num_clusters == 0:
-            logging.info('%s (%s) has zero clusters, removing from further analysis',
-                         g.species, g.id)
-            continue
-        g.as2faa(args.force)
-        # FIXME: make this run in parallel
-        g.parse_gene_cluster_relations(args)
-        # Add to the dict of all genomes.
+                inputs[g.id] = g
+
+    workers = cpu_count()
+    workers_list = []
+    logging.info("Starting %s Genome workers.", workers)
+    for _ in range(workers):
+        p = Process(target=worker)
+        workers_list.append(p)
+        p.start()
+    del _
+
+    for g in inputs.itervalues():
+        task_queue.put(g)
+        del inputs[g.id]
+
+    logging.debug("Adding %s STOP messages to task_queue.", workers)
+    for _ in range(workers):
+        task_queue.put((0, 'STOP'))
+    del _, workers
+
+    # join() the processes
+    for p in workers_list:
+        p.join()
+    del p, workers_list
+
+    # Collect results.
+    while not done_queue.empty():
+        g = done_queue.get()
         inputs[g.id] = g
+
+    task_queue.close()
+    done_queue.close()
 
 
 def prepare_inparanoid(inputs, args):
