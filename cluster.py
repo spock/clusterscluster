@@ -42,6 +42,7 @@ import logging
 import os
 import glob
 
+from collections import namedtuple
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
@@ -52,13 +53,16 @@ from itertools import permutations, combinations
 
 import MultiParanoid
 import Genome
-from lib import utils
+from lib import utils, ClusterPair
 
 
 __all__ = []
 __version__ = 0.6
 __date__ = '2013-07-10'
 __updated__ = '2014-04-11'
+
+
+cluster = namedtuple('Cluster', ['genome', 'number'])
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -435,7 +439,7 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
 # /Set of functions used by process()
 #
 
-def process(inputs, paranoid, args):
+def process(all_clusters, inputs, paranoid, args):
     # TODO: simplify, split up this function
     '''
     Analyze quickparanoid results. 'args' contains:
@@ -460,8 +464,6 @@ def process(inputs, paranoid, args):
     # Declare important variables.
     # List of recognized species IDs.
     species = inputs.keys()
-    # List of all clusters from all species.
-    all_clusters = []
     # 2-level nested dict of cluster pairs link weights,
     # e.g. cluster_weights['A'] = {'B': 0.95, ...}
     # TODO: replace with numpy matrix/array
@@ -610,9 +612,11 @@ def process(inputs, paranoid, args):
 
 def preprocess_input_files(inputs, args):
     '''
-    inputs: dictionary to populate with Genomes
-    args.paths: list of genbank files to process
+    inputs: dictionary to populate with Genomes;
+    args.paths: list of genbank files to process;
+    return all_clusters, the list of (genome_id, cluster_number) named tuples.
     '''
+    all_clusters = []
     task_queue = Queue()
     done_queue = Queue()
 
@@ -690,9 +694,14 @@ def preprocess_input_files(inputs, args):
     while not done_queue.empty():
         g = done_queue.get()
         inputs[g.id] = g
+        # Populate all_clusters.
+        for c in g.clusters:
+            all_clusters.append(cluster(g.id, c))
 
     task_queue.close()
     done_queue.close()
+
+    return all_clusters
 
 
 def prepare_inparanoid(inputs, args):
@@ -1105,14 +1114,14 @@ def main():
         mkdir(args.project)
 
     # "Catalog" all genomes.
-    inputs = {} # Map genome ID to Genome object.
+    genomes = {} # Map genome ID to Genome object.
 
     if len(args.paths) == 1:
         logging.warning("Single input file specified, program will exit after preprocessing.")
-    preprocess_input_files(inputs, args)
+    all_clusters = preprocess_input_files(genomes, args)
     if len(args.paths) == 1: # single input - exit
         sys.exit(3)
-    inparanoidir, faafiles = prepare_inparanoid(inputs, args)
+    inparanoidir, faafiles = prepare_inparanoid(genomes, args)
     run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
     if args.emulate_inparanoid:
         logging.info('Exiting prematurely because of --emulate-inparanoid.')
@@ -1121,8 +1130,13 @@ def main():
     result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
     del inparanoidir, faafiles
 
+    # Generate cluster pairs.
+    cluster_pairs = []
+    for pair in combinations(all_clusters, 2):
+        cluster_pairs.append(ClusterPair(pair[0], pair[1]))
+
     # Process result_path.
-    process(inputs, result_path, args)
+    process(genomes, result_path, args)
     return 0
 
 
