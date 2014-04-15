@@ -42,7 +42,6 @@ import logging
 import os
 import glob
 
-from collections import namedtuple
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
 from os.path import exists, join, dirname, realpath, basename#, splitext
@@ -54,15 +53,13 @@ from itertools import permutations, combinations
 import MultiParanoid
 import Genome
 from lib import utils, ClusterPair
+from lib.ClusterPair import cluster
 
 
 __all__ = []
 __version__ = 0.6
 __date__ = '2013-07-10'
 __updated__ = '2014-04-11'
-
-
-cluster = namedtuple('Cluster', ['genome', 'number'])
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -125,40 +122,6 @@ def bin_key(weight):
 #
 # Set of functions used by process()
 #
-
-def get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
-    '''
-    For the given `gene`,
-    - find to which orthology group/cluster from `mp` it belongs,
-    - check if other genes from that group are a part of some biosynthetic clusters,
-    - return the list of those biosynthetic clusters
-    '''
-    if gene not in mp.gene2ortho:
-        return [] # `gene` does not belong to any group of orthologs
-    bioclusters = []
-    for orthoclust in mp.gene2ortho[gene]:
-        logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
-        for xeno_gene in mp.ortho2genes[orthoclust]:
-            # Extract LOCUS from gene name, find species from it.
-            xeno_species = xeno_gene.rsplit(':')[-1]
-            # Check if xeno_gene belongs to any biosynthetic clusters.
-            if xeno_gene in gene2clusters[xeno_species]:
-                bioclusters.extend(gene2clusters[xeno_species][xeno_gene])
-                logging.debug('\txeno_gene %s belongs to %s', xeno_gene,
-                              gene2clusters[xeno_species][xeno_gene])
-    return bioclusters
-
-
-def calculate_links(c1, c2, cluster2genes, mp, gene2clusters, inputs):
-    '''
-    Given biosynthetic clusters c1 and c2, count the number of unique
-    orthologoues gene pairs ("links") between them.
-    '''
-    links = 0
-    for gene in cluster2genes[c1[0]][c1[1]]:
-        if c2 in get_gene_links_to_bioclusters(gene, mp, gene2clusters, inputs):
-            links += 1
-    return links
 
 
 def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
@@ -439,6 +402,7 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
 # /Set of functions used by process()
 #
 
+
 def process(all_clusters, inputs, paranoid, args):
     # TODO: simplify, split up this function
     '''
@@ -459,8 +423,6 @@ def process(all_clusters, inputs, paranoid, args):
     '''
     # TODO: deprecate skipp? (can be filtered out at the analysis step)
 
-    mp = MultiParanoid(paranoid, args.no_tree_problems, args.no_name_problems)
-
     # Declare important variables.
     # List of recognized species IDs.
     species = inputs.keys()
@@ -476,10 +438,6 @@ def process(all_clusters, inputs, paranoid, args):
     intra_one = []
     inter_one = []
 
-    print('Constructing gene-based cluster links.')
-    pairs = combinations(all_clusters, 2)
-    # Simple counters of the number of cluster pairs/weights we are processing.
-    num_pairs = 0
     # Storage for bins to show weights distribution.
     weight_bins = {}
     for x in range(5, 105, 5):
@@ -1135,8 +1093,19 @@ def main():
     for pair in combinations(all_clusters, 2):
         cluster_pairs.append(ClusterPair(pair[0], pair[1]))
 
-    # Process result_path.
-    process(genomes, result_path, args)
+    # Parse quickparanoid results.
+    mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
+
+    print('Constructing orthology gene-based cluster links.')
+    for cp in cluster_pairs:
+        # Calculate the number of orthologous links.
+        cp.assign_orthologous_link(mp, genomes, args)
+        # Calculate gene-level protein identities in clusters.
+        cp.CDS_identities(genomes)
+    print('Processed %s cluster pairs.' % len(cluster_pairs))
+
+    # FIXME
+
     return 0
 
 
