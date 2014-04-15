@@ -1100,11 +1100,30 @@ def main():
     for cp in cluster_pairs:
         # Calculate the number of orthologous links.
         cp.assign_orthologous_link(mp, genomes, args)
-        # Calculate gene-level protein identities in clusters.
-        cp.CDS_identities(genomes)
+        # For better efficiency, sequence-level operations are moved out.
     print('Processed %s cluster pairs.' % len(cluster_pairs))
 
     # FIXME
+    # For efficiency, sequence-level comparisons are grouped together, so as
+    # to use every loaded genome many times before unloading.
+    for g1 in genomes:
+        genomes[g1].load()
+        for g2 in genomes:
+            genomes[g2].load()
+            # iterate all possible cluster pairs between these 2 genomes;
+            # can also paallelize here
+            if cp.link1 > 0 or cp.link2 > 0:
+                # Calculate gene-level protein identities in clusters.
+                cp.CDS_identities(genomes)
+                # Calculate average protein identities in clusters.
+                cp.average_identities(genomes)
+                # Optional, depends on args: end-trim non-similar genes?
+                # Calculate overall gene order preservation.
+                # Calculate overall gene orienation preservation.
+                # Calculate predicted domains order preservation within genes.
+                # Calculate cluster-level nucleotide identity.
+            genomes[g2].unload()
+        genomes[g1].unload()
 
     return 0
 

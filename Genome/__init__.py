@@ -34,7 +34,6 @@ def __init__(self, infile, project):
         self.id = '' # id of the longest record
         self.accessions = [] # other accessions
         self.ids = [] # other ids
-        self.records = None # points at the indexed GenBank record(s)
         self.contigs = 0 # count of records/contigs/plasmids
         self.genome_size = 0 # sum of lengths of all records
         self.total_genes_in_clusters = 0 # number of genes in all clusters
@@ -50,6 +49,8 @@ def __init__(self, infile, project):
         self.gene2clusters = {} # gene ID to a list of cluster numbers
         self.clustersizes = {} # cluster number to cluster size, bps
         self.is_genecluster_parsed = False
+        # SeqIO record.
+        self.records = None
         # These values are for the parent to check.
         self.antismash2_reused = False
         self.antismash_warning_shown = False
@@ -172,16 +173,16 @@ def parse_gene_cluster_relations(self, args):
     # Dict of per-SeqRecord Interval trees of clusters, i.e.
     # clustertrees[record_number] = IntervalTree()
     clustertrees = {}
-    # List of all records. TODO: make this an index, and put into self?
-    records = list(SeqIO.parse(self.infile, "genbank", generic_dna))
+    # Load list of all records.
+    self.load()
     print('Parsing clusters and assigning genes to them in %s (%s):' %
           (self.id, self.species))
     if args.trim:
         logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
         logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
     # Populate clusters tree and dict with (start, end) as keys.
-    for r in records:
-        record_number = records.index(r)
+    for r in self.records:
+        record_number = self.records.index(r)
         clustertrees[record_number] = IntervalTree()
         for f in r.features:
             if f.type == 'cluster':
@@ -244,8 +245,8 @@ def parse_gene_cluster_relations(self, args):
                              self.id, cluster_number, f.qualifiers['product'][0],
                              start, end, end-start)
     logging.debug('\tAssign genes to biosynthetic clusters')
-    for r in records:
-        record_number = records.index(r)
+    for r in self.records:
+        record_number = self.records.index(r)
         for f in r.features:
             if f.type == 'CDS':
                 # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
@@ -280,4 +281,23 @@ def parse_gene_cluster_relations(self, args):
     print('\t%s: %s clusters populated with %s genes' % (self.id,
                                                          len(self.cluster2genes),
                                                          self.total_genes_in_clusters))
-    del clustertrees, records
+    del clustertrees
+    self.unload()
+
+
+def load(self):
+    '''
+    Parse GenBank file, make sequence and annotation easily accessible
+    as .record.
+    '''
+    if self.records == None:
+        self.records = list(SeqIO.parse(self.infile, "genbank", generic_dna))
+
+
+def unload(self):
+    '''
+    Unload .record (will no longer be accessible)
+    '''
+    if self.records != None:
+        del self.records
+        self.records = None
