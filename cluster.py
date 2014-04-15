@@ -1088,22 +1088,12 @@ def main():
     result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
     del inparanoidir, faafiles
 
-    # Generate cluster pairs.
-    cluster_pairs = []
-    for pair in combinations(all_clusters, 2):
-        cluster_pairs.append(ClusterPair(pair[0], pair[1]))
-
     # Parse quickparanoid results.
     mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
-    print('Constructing orthology gene-based cluster links.')
-    for cp in cluster_pairs:
-        # Calculate the number of orthologous links.
-        cp.assign_orthologous_link(mp, genomes, args)
-        # For better efficiency, sequence-level operations are moved out.
-    print('Processed %s cluster pairs.' % len(cluster_pairs))
+    # Processed cluster pairs with at least 1 ortho-link.
+    cluster_pairs = []
 
-    # FIXME
     # For efficiency, sequence-level comparisons are grouped together, so as
     # to use every loaded genome many times before unloading.
     for g1 in genomes:
@@ -1111,19 +1101,33 @@ def main():
         for g2 in genomes:
             genomes[g2].load()
             # iterate all possible cluster pairs between these 2 genomes;
-            # can also paallelize here
-            if cp.link1 > 0 or cp.link2 > 0:
-                # Calculate gene-level protein identities in clusters.
-                cp.CDS_identities(genomes)
-                # Calculate average protein identities in clusters.
-                cp.average_identities(genomes)
-                # Optional, depends on args: end-trim non-similar genes?
-                # Calculate overall gene order preservation.
-                # Calculate overall gene orienation preservation.
-                # Calculate predicted domains order preservation within genes.
-                # Calculate cluster-level nucleotide identity.
+            # can also parallelize here
+            # Generate cluster pairs.
+            print('Constructing orthology gene-based cluster links.')
+            for cl1, cl2 in [(cluster(g1, c1), cluster(g2, c2))
+                           for c1 in genomes[g1].clusters
+                           for c2 in genomes[g2].clusters]:
+                cp = ClusterPair(cl1, cl2)
+                # Calculate the number of orthologous links.
+                cp.assign_orthologous_link(mp, genomes, args)
+                if cp.link1 > 0 or cp.link2 > 0:
+                    # Calculate gene-level protein identities in clusters.
+                    cp.CDS_identities(genomes)
+                    # Calculate average protein identities in clusters.
+                    cp.average_identities(genomes)
+                    # Optional, depends on args: end-trim non-similar genes?
+                    # Calculate overall gene order preservation.
+                    cp.gene_order(genomes)
+                    # Calculate overall gene orienation preservation.
+                    cp.gene_strandedness(genomes)
+                    # Calculate predicted domains order preservation within genes.
+                    cp.domains(genomes)
+                    # Calculate cluster-level nucleotide identity.
+                    cp.nucleotide_similarity(genomes)
+                    cluster_pairs.append(cp)
             genomes[g2].unload()
         genomes[g1].unload()
+    print('Processed %s cluster pairs.' % len(cluster_pairs))
 
     return 0
 

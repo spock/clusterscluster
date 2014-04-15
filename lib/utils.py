@@ -1,6 +1,7 @@
 import subprocess
 import logging
 
+
 # Method borrowed from antismash.utils
 def execute(commands, inputs = None):
     "Execute commands in a system-independent manner"
@@ -20,3 +21,13 @@ def execute(commands, inputs = None):
     except OSError, e:
         logging.debug("%r %r returned %r" % (commands, inputs[:40], e))
         raise
+
+
+def usearch(s1, s2, cutoff = 0.4, full = False):
+    '''
+    Run usearch on 2 sequences, return identity.
+    s1, s2: two sequences to align
+    cutoff: report zero for values below the cutoff
+    full: perform full Dynamic Programming search (-fulldp)
+    '''
+    

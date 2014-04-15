@@ -126,7 +126,6 @@ def run_antismash(self, force, antismash_warning_shown, no_extensions,
         # Removed time-consuming/unnecessary options: smcogs, clusterblast,
         # subclusterblast.
         # Removed unnecessary options: --full-blast, --full-hmmer.
-        # TODO: when this part is properly parallelized, set --cpus to 1?
         as2_options.extend(['--cpus', str(cores), '--verbose', '--all-orfs'])
         as2_options.extend(['--input-type', 'nucl', '--inclusive'])
         if no_extensions:
@@ -135,11 +134,10 @@ def run_antismash(self, force, antismash_warning_shown, no_extensions,
             as2_options.append('--no-extensions')
         as2_options.append(self.fnafile)
         logging.info('Running antismash2: %s', ' '.join(as2_options))
-        # TODO: show output from child processes?...
         out, err, retcode = utils.execute(as2_options)
         if retcode != 0:
-            logging.debug('antismash2 returned %d: %r while scanning %r',
-                          retcode, err, self.fnafile)
+            logging.debug('antismash2 returned %d: %r while scanning %r, full output: %s',
+                          retcode, err, self.fnafile, out)
         # antismash's algorithm for naming the output file:
         # basename = seq_records[0].id
         # output_name = path.join(options.outputfoldername, "%s.final.gbk" % basename)
@@ -301,3 +299,24 @@ def unload(self):
     if self.records != None:
         del self.records
         self.records = None
+
+
+def index_genbank_features(gb_record, feature_type, qualifier):
+    '''
+    allow retrieving gene sequences/translations by locus_tag, original code
+    from http://www2.warwick.ac.uk/fac/sci/moac/people/students/peter_cock/python/genbank/#indexing_features
+    '''
+    # FIXME
+    answer = dict()
+    for (index, feature) in enumerate(gb_record.features):
+        if feature.type==feature_type:
+            if qualifier in feature.qualifiers:
+                #There should only be one locus_tag per feature, but there
+                #are usually several db_xref entries
+                for value in feature.qualifiers[qualifier]:
+                    if value in answer:
+                        print("WARNING - Duplicate key %s for %s features %i and %i" \
+                           % (value, feature_type, answer[value], index))
+                    else:
+                        answer[value] = index
+    return answer
