@@ -1,6 +1,8 @@
 from __future__ import print_function
 import logging
 import itertools
+import csv
+from tempfile import NamedTemporaryFile
 from collections import namedtuple
 from utils import usearch
 
@@ -146,19 +148,26 @@ class ClusterPair(object):
         gl2 = genomes[self.g2].cluster2genes[self.c2]
         # Iterate all pairs of genes of this cluster pair.
         gene_pairs = []
-        for gene1, gene2 in itertools.product(gl1, gl2):
-            # FIXME: write method for getting sequence by gene ID.
-            seq1 = genomes[self.g1].get_protein(gene1)
-            seq2 = genomes[self.g1].get_protein(gene1)
-            # Quick usearch estimate of identity.
-            gene_pairs.append(GP(usearch(seq1, seq2), gene1, gene2))
-        gene_pairs.sort()
-        sort gene pairs, e.g. by (identity, g1, g2)
-        for pair in pairs:
-            only allow 1, best similarity pair for each gene pair
-        if g1 in similarities, or g2 in similarities, (g1 in s and g2 in s[g1]) or (g2 in s and g1 in s[g2])
-            continue # similarity[g1][g2] = 0.6, symmetric
-        else:
-            similarities[g1] = {g2: similarity}
-            similarities[g2] = {g1: similarity}
-        pass
+        # Make /tmp file and open it for writing.
+        with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
+            for gene1, gene2 in itertools.product(gl1, gl2):
+                seq1 = genomes[self.g1].get_protein(gene1)
+                seqfile.write(">%s\n%s\n" % (gene1, seq1))
+                seq2 = genomes[self.g2].get_protein(gene2)
+                seqfile.write(">%s\n%s\n" % (gene2, seq2))
+                assert len(seq1) > 0 and len(seq2) > 0
+            # Run usearch.
+            results = usearch(seqfile)
+            # Use csv to parse results into a list of tuples
+            reader = csv.reader([results])
+            for row in reader:
+                gene_pairs.append(GP(row[2], row[0], row[1])) # identity, query, target
+        # Sort gene pairs by identity.
+#        gene_pairs.sort()
+#        for pair in pairs:
+#            only allow 1, best similarity pair for each gene pair
+#        if g1 in similarities, or g2 in similarities, (g1 in s and g2 in s[g1]) or (g2 in s and g1 in s[g2])
+#            continue # similarity[g1][g2] = 0.6, symmetric
+#        else:
+#            similarities[g1] = {g2: similarity}
+#            similarities[g2] = {g1: similarity}

@@ -23,11 +23,23 @@ def execute(commands, inputs = None):
         raise
 
 
-def usearch(s1, s2, cutoff = 0.4, full = False):
+def usearch(interleaved, cutoff = 0.4, full = False):
     '''
-    Run usearch on 2 sequences, return identity.
-    s1, s2: two sequences to align
+    Run usearch on interleaved sequences file, return output as text (3 columns:
+    query ID, target ID, percent identity).
+    interleaved: sequences to align, multifasta, 1st/2nd/1st/2nd/etc
     cutoff: report zero for values below the cutoff
-    full: perform full Dynamic Programming search (-fulldp)
+    full: perform full Dynamic Programming search (-fulldp), usually improves
+    percent identity.
     '''
-    
+    args = ['usearch']
+    if full:
+        args.append('-fulldp')
+    args.extend(['-id', cutoff, '-pairs_global', interleaved, '-userfields',
+                 'query+target+id,', '-userout', '/dev/stdout'])
+    out, err, retcode = execute(args)
+    if retcode != 0:
+        logging.error('usearch failed with %d: %r while searching %r, full output follows:\n%s',
+                      retcode, err, interleaved, out)
+    else:
+        return out
