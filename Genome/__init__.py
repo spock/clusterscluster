@@ -51,6 +51,10 @@ def __init__(self, infile, project):
         self.is_genecluster_parsed = False
         # SeqIO record.
         self.records = None
+        # Dict mapping locus_tag to (record_index, feature_index) in record.features.
+        self.CDS = None
+        # Dict mapping cluster_number to (record_index, feature_index) in record.features.
+        self.clusterindex = None
         # These values are for the parent to check.
         self.antismash2_reused = False
         self.antismash_warning_shown = False
@@ -290,33 +294,55 @@ def load(self):
     '''
     if self.records == None:
         self.records = list(SeqIO.parse(self.infile, "genbank", generic_dna))
+        self.CDS = self.index_genbank_features('CDS', 'locus_tag')
+        self.clusterindex = self.index_genbank_features('cluster', 'note')
 
 
 def unload(self):
     '''
-    Unload .record (will no longer be accessible)
+    Unload .records and .CDS (will no longer be accessible)
     '''
     if self.records != None:
-        del self.records
+        del self.records, self.CDS, self.clusterindex
         self.records = None
+        self.CDS = None
+        self.clusterindex = None
 
 
-def index_genbank_features(gb_record, feature_type, qualifier):
+def index_genbank_features(self, feature_type, qualifier):
     '''
     allow retrieving gene sequences/translations by locus_tag, original code
     from http://www2.warwick.ac.uk/fac/sci/moac/people/students/peter_cock/python/genbank/#indexing_features
     '''
-    # FIXME
     answer = dict()
-    for (index, feature) in enumerate(gb_record.features):
-        if feature.type==feature_type:
-            if qualifier in feature.qualifiers:
-                #There should only be one locus_tag per feature, but there
-                #are usually several db_xref entries
-                for value in feature.qualifiers[qualifier]:
-                    if value in answer:
-                        print("WARNING - Duplicate key %s for %s features %i and %i" \
-                           % (value, feature_type, answer[value], index))
-                    else:
-                        answer[value] = index
+    record_index = 0
+    for record in self.records:
+        for (index, feature) in enumerate(record.features):
+            # ugly but functional, special handling for clusters
+            if feature_type == 'cluster':
+                value = self.parse_cluster_number(feature.qualifiers[qualifier])
+                answer[value] = (record_index, index)
+            elif feature.type == feature_type:
+                if qualifier in feature.qualifiers:
+                    # There should only be one locus_tag per feature, but there
+                    # are usually several db_xref entries
+                    for value in feature.qualifiers[qualifier]:
+                        if value in answer:
+                            print("WARNING - Duplicate key %s for %s features %i and %i" \
+                               % (value, feature_type, answer[value], index))
+                        else:
+                            answer[value] = (record_index, index)
+        record_index += 1
     return answer
+
+
+def get_protein(self, geneid):
+    '''
+    Given a gene ID (locus_tag), return amino acid sequence.
+    '''
+    record_index, index = self.CDS[geneid]
+    feature = self.records[record_index].features[index]
+    if 'translation' in feature.qualifiers:
+        return feature.qualifiers['translation'][0]
+    else:
+        return feature.extract(self.records[record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)
