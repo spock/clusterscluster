@@ -51,9 +51,9 @@ from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations
 
 import MultiParanoid
-import Genome
 from lib import utils, ClusterPair
 from lib.ClusterPair import cluster
+from lib.Genome import Genome
 
 
 __all__ = []
@@ -574,7 +574,7 @@ def preprocess_input_files(inputs, args):
     args.paths: list of genbank files to process;
     return all_clusters, the list of (genome_id, cluster_number) named tuples.
     '''
-    all_clusters = []
+#    all_clusters = []
     task_queue = Queue()
     done_queue = Queue()
 
@@ -594,8 +594,9 @@ def preprocess_input_files(inputs, args):
             g.run_antismash(args.force, args.antismash_warning_shown,
                             args.no_extensions, cores = 1)
             args.antismash_warning_shown = g.antismash_warning_shown
+            g.parse_gene_cluster_relations(args)
             # Do not process zero-cluster genomes.
-            if g.num_clusters == 0:
+            if g.num_clusters() == 0:
                 logging.info('%s (%s) has zero clusters, removing from further analysis',
                              g.species, g.id)
                 continue
@@ -623,7 +624,7 @@ def preprocess_input_files(inputs, args):
                     else:
                         g.id = new_id
                         del new_id
-                inputs[g.id] = g
+        inputs[g.id] = g
 
     workers = cpu_count()
     workers_list = []
@@ -636,11 +637,12 @@ def preprocess_input_files(inputs, args):
 
     for g in inputs.itervalues():
         task_queue.put(g)
-        del inputs[g.id]
+    # Empty inputs.
+    inputs = {}
 
     logging.debug("Adding %s STOP messages to task_queue.", workers)
     for _ in range(workers):
-        task_queue.put((0, 'STOP'))
+        task_queue.put('STOP')
     del _, workers
 
     # join() the processes
@@ -653,13 +655,11 @@ def preprocess_input_files(inputs, args):
         g = done_queue.get()
         inputs[g.id] = g
         # Populate all_clusters.
-        for c in g.clusters:
-            all_clusters.append(cluster(g.id, c))
+#        for c in g.clusters:
+#            all_clusters.append(cluster(g.id, c))
 
     task_queue.close()
     done_queue.close()
-
-    return all_clusters
 
 
 def prepare_inparanoid(inputs, args):
@@ -671,7 +671,6 @@ def prepare_inparanoid(inputs, args):
     faafiles = []
     for _ in inputs.itervalues():
         faafiles.append(basename(_.faafile))
-    del _
     faafiles.sort(key = lambda s: s.lower())
 
     # Put everything inparanoid-related into a subdir.
@@ -902,7 +901,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
             for _ in glob.glob(join(inparanoidir, ext)):
                 logging.debug("Deleting %s.", _)
                 remove(_)
-        del _, formatdb_extensions
+        del formatdb_extensions
 
     # CD back to the initial directory.
     chdir(curr_path)
@@ -1076,10 +1075,11 @@ def main():
 
     if len(args.paths) == 1:
         logging.warning("Single input file specified, program will exit after preprocessing.")
-    all_clusters = preprocess_input_files(genomes, args)
+    preprocess_input_files(genomes, args)
     if len(args.paths) == 1: # single input - exit
         sys.exit(3)
     inparanoidir, faafiles = prepare_inparanoid(genomes, args)
+    logging.debug(faafiles)
     run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
     if args.emulate_inparanoid:
         logging.info('Exiting prematurely because of --emulate-inparanoid.')
@@ -1113,6 +1113,7 @@ def main():
                 if cp.link1 > 0 or cp.link2 > 0:
                     # Calculate gene-level protein identities in clusters.
                     cp.CDS_identities(genomes)
+                    sys.exit()
                     # Calculate average protein identities in clusters.
                     cp.average_identities(genomes)
                     # Optional, depends on args: end-trim non-similar genes?

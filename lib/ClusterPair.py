@@ -158,6 +158,8 @@ class ClusterPair(object):
                 assert len(seq1) > 0 and len(seq2) > 0
             # Run usearch.
             results = usearch(seqfile)
+            print(results)
+            return
             # Use csv to parse results into a list of tuples
             reader = csv.reader([results])
             for row in reader:
