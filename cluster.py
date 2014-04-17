@@ -601,7 +601,6 @@ def preprocess_input_files(inputs, args):
                              g.species, g.id)
                 continue
             g.as2faa(args.force)
-            g.parse_gene_cluster_relations(args)
             done_queue.put(g)
 
     for infile in args.paths:
