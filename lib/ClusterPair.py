@@ -92,10 +92,18 @@ class ClusterPair(object):
         '''
         links = 0
         if which == 1:
+            logging.debug("Looking at %s genes in cluster %s...",
+                          len(genomes[self.g1].cluster2genes[self.c1]),
+                          self.c1)
             for gene in genomes[self.g1].cluster2genes[self.c1]:
+                logging.debug('\t%s', gene)
+                # FIXME: never finds anything
                 if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
         if which == 2:
+            logging.debug("Looking at %s genes in cluster %s...",
+                          len(genomes[self.g2].cluster2genes[self.c2]),
+                          self.c2)
             for gene in genomes[self.g2].cluster2genes[self.c2]:
                 if self.gc1 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
@@ -110,7 +118,7 @@ class ClusterPair(object):
                            self.num_c1_genes(genomes)))
         link2 = float(min(self.calculate_links(2, mp, genomes),
                            self.num_c2_genes(genomes)))
-        logging.debug('\tlink1 = %s and link2 = %s for %s and %s (%s and %s genes)',
+        logging.debug('\tlink1= %s and link2= %s for %s and %s, %s/%s genes',
                       link1, link2, self.gc1, self.gc2, self.num_c1_genes(genomes),
                       self.num_c2_genes(genomes))
         if args.strict:
