@@ -92,18 +92,18 @@ class ClusterPair(object):
         '''
         links = 0
         if which == 1:
-            logging.debug("Looking at %s genes in cluster %s...",
+            logging.debug("Looking at %s genes in cluster %s (2nd cluster is %s)...",
                           len(genomes[self.g1].cluster2genes[self.c1]),
-                          self.c1)
+                          self.c1, self.gc2)
             for gene in genomes[self.g1].cluster2genes[self.c1]:
-                logging.debug('\t%s', gene)
+                # Each 'gene' is a 'locus_tag:genome_id' string.
                 # FIXME: never finds anything
                 if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
         if which == 2:
-            logging.debug("Looking at %s genes in cluster %s...",
+            logging.debug("Looking at %s genes in cluster %s (1st cluster is %s)...",
                           len(genomes[self.g2].cluster2genes[self.c2]),
-                          self.c2)
+                          self.c2, self.gc1)
             for gene in genomes[self.g2].cluster2genes[self.c2]:
                 if self.gc1 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
