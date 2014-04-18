@@ -168,8 +168,8 @@ class Genome(object):
 
     def parse_gene_cluster_relations(self, args):
         '''
-        Assign genes to clusters, clusters to genes, and fill other useful maps and
-        lists.
+        Assign genes to clusters, clusters to genes, and fill other useful
+        maps and lists.
         args: original arguments namespace from parent/main (args.trim etc)
         '''
         rulesdict = hmm_detection.create_rules_dict()

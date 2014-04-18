@@ -50,10 +50,10 @@ from argparse import ArgumentParser
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations
 
-import MultiParanoid
-from lib import utils, ClusterPair
-from lib.ClusterPair import cluster
+from lib import utils
+from lib.ClusterPair import ClusterPair, cluster
 from lib.Genome import Genome
+from lib.MultiParanoid import MultiParanoid
 
 
 __all__ = []
@@ -575,34 +575,8 @@ def preprocess_input_files(inputs, args):
     return all_clusters, the list of (genome_id, cluster_number) named tuples.
     '''
 #    all_clusters = []
-    task_queue = Queue()
-    done_queue = Queue()
 
-    def worker():
-        while True:
-            try:
-                # g = Genome object
-                g = task_queue.get() # By default, there is no timeout.
-            except: # Queue.Empty
-                logging.warning("worker(tasks, done) encountered an exception trying tasks.get()")
-                raise
-            # Exit if 'STOP' element is found.
-            if g == 'STOP':
-                logging.debug("STOP found, exiting.")
-                break
-            g.gb2fna()
-            g.run_antismash(args.force, args.antismash_warning_shown,
-                            args.no_extensions, cores = 1)
-            args.antismash_warning_shown = g.antismash_warning_shown
-            g.parse_gene_cluster_relations(args)
-            # Do not process zero-cluster genomes.
-            if g.num_clusters() == 0:
-                logging.info('%s (%s) has zero clusters, removing from further analysis',
-                             g.species, g.id)
-                continue
-            g.as2faa(args.force)
-            done_queue.put(g)
-
+    # Process genome IDs.
     for infile in args.paths:
         g = Genome(infile, args.project)
         # Check for duplicate ID.
@@ -625,38 +599,72 @@ def preprocess_input_files(inputs, args):
                         del new_id
         inputs[g.id] = g
 
-    workers = cpu_count()
+    workers = min(cpu_count(), len(inputs))
+    qsize = 3 * workers
+    task_queue = Queue(maxsize = qsize)
+    done_queue = Queue(maxsize = qsize)
+    # 1. Define workers.
+    def geneparser(tasks, done, args):
+        while True:
+            try:
+                # g = Genome object
+                g = tasks.get() # By default, there is no timeout.
+            except: # Queue.Empty
+                logging.warning("geneparser(tasks, done) encountered an exception trying tasks.get()")
+                raise
+            # Exit if 'STOP' element is found.
+            if g == 'STOP':
+                logging.debug("STOP found, exiting.")
+                break
+            g.gb2fna()
+            g.run_antismash(args.force, args.antismash_warning_shown,
+                            args.no_extensions, cores = 1)
+            # FIXME: cannot directly assign to args.antismash_warning_shown!!!
+            args.antismash_warning_shown = g.antismash_warning_shown
+            g.parse_gene_cluster_relations(args)
+            # Do not process zero-cluster genomes.
+            if g.num_clusters() == 0:
+                logging.info('%s (%s) has zero clusters, removing from further analysis',
+                             g.species, g.id)
+                continue
+            g.as2faa(args.force)
+            done.put(g)
+    # 2. Start workers.
     workers_list = []
     logging.info("Starting %s Genome workers.", workers)
     for _ in range(workers):
-        p = Process(target=worker)
-        workers_list.append(p)
+        p = Process(target=geneparser, args=(task_queue, done_queue, args))
         p.start()
-    del _
-
+        workers_list.append(p)
+    del _, p
+    # 3. Populate tasks.
+    logging.debug("Populating task_queue.")
     for g in inputs.itervalues():
         task_queue.put(g)
-    # Empty inputs.
-    inputs = {}
-
+    # 4. Add STOP messages.
     logging.debug("Adding %s STOP messages to task_queue.", workers)
     for _ in range(workers):
         task_queue.put('STOP')
-    del _, workers
-
-    # join() the processes
+    del workers
+    # 5. Start collecting results, assume 1 task takes <= 5 seconds.
+    # First, empty inputs.
+    for k in list(inputs.iterkeys()):
+        del inputs[k]
+    while True:
+        try:
+            g = done_queue.get(timeout = 5)
+            inputs[g.id] = g
+#             Populate all_clusters.
+#            for c in g.clusters:
+#                all_clusters.append(cluster(g.id, c))
+        except: # Queue.Empty for > 5 seconds
+            break
+    # 6. Wait for processes to finish, close queues.
+    # FIXME: join() the processes hangs, fixed with timeout
+    logging.debug("Joining processes.")
     for p in workers_list:
-        p.join()
+        p.join(timeout = 5)
     del p, workers_list
-
-    # Collect results.
-    while not done_queue.empty():
-        g = done_queue.get()
-        inputs[g.id] = g
-        # Populate all_clusters.
-#        for c in g.clusters:
-#            all_clusters.append(cluster(g.id, c))
-
     task_queue.close()
     done_queue.close()
 
@@ -771,9 +779,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         print("BLASTing %s pairwise permutations." % total_permutations)
     # 1. Define worker.
     def pair_blaster(tasks, total_permutations):
-        '''
-        parallel worker for paired blasts
-        '''
+        'parallel worker for paired blasts'
         while True:
             try:
                 # serial = counter, faa1/2 = paths to .faa files
@@ -1078,7 +1084,6 @@ def main():
     if len(args.paths) == 1: # single input - exit
         sys.exit(3)
     inparanoidir, faafiles = prepare_inparanoid(genomes, args)
-    logging.debug(faafiles)
     run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
     if args.emulate_inparanoid:
         logging.info('Exiting prematurely because of --emulate-inparanoid.')

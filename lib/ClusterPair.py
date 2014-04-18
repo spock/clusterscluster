@@ -41,17 +41,17 @@ class ClusterPair(object):
         self.c2_genes = 0
 
 
-    def c1_genes(self, genomes):
+    def num_c1_genes(self, genomes):
         '''Return the number of genes in cluster c1.'''
         if self.c1_genes == 0:
-            self.c1_genes = len(genomes[self.g1].cluster2genes(self.c1))
+            self.c1_genes = len(genomes[self.g1].cluster2genes[self.c1])
         return self.c1_genes
 
 
-    def c2_genes(self, genomes):
+    def num_c2_genes(self, genomes):
         '''Return the number of genes in cluster c2.'''
         if self.c2_genes == 0:
-            self.c2_genes = len(genomes[self.g2].cluster2genes(self.c2))
+            self.c2_genes = len(genomes[self.g2].cluster2genes[self.c2])
         return self.c2_genes
 
 
@@ -107,31 +107,33 @@ class ClusterPair(object):
         Assign orthologous link to this cluster pair.
         '''
         link1 = float(min(self.calculate_links(1, mp, genomes),
-                           self.c1_genes(genomes)))
+                           self.num_c1_genes(genomes)))
         link2 = float(min(self.calculate_links(2, mp, genomes),
-                           self.c2_genes(genomes)))
+                           self.num_c2_genes(genomes)))
         logging.debug('\tlink1 = %s and link2 = %s for %s and %s (%s and %s genes)',
-                      link1, link2, self.gc1, self.gc2, self.c1_genes(genomes),
-                      self.c2_genes(genomes))
+                      link1, link2, self.gc1, self.gc2, self.num_c1_genes(genomes),
+                      self.num_c2_genes(genomes))
         if args.strict:
             # No link can be larger than the number of genes in the 2nd cluster.
-            if link1 > self.c2_genes(genomes):
-                link1 = float(self.c2_genes(genomes))
+            if link1 > self.num_c2_genes(genomes):
+                link1 = float(self.num_c2_genes(genomes))
                 logging.debug('strict mode, new link1 is %s', link1)
-            if link2 > self.c1_genes(genomes):
-                link2 = float(self.c1_genes(genomes))
+            if link2 > self.num_c1_genes(genomes):
+                link2 = float(self.num_c1_genes(genomes))
                 logging.debug('strict mode, new link2 is %s', link2)
             try:
-                assert link1 <= min(self.c1_genes(genomes), self.c2_genes(genomes)) and link2 <= min(self.c1_genes(genomes), self.c2_genes(genomes))
+                assert link1 <= min(self.num_c1_genes(genomes),
+                                    self.num_c2_genes(genomes)) and link2 <= min(self.num_c1_genes(genomes),
+                                                                                 self.num_c2_genes(genomes))
             except:
                 logging.exception('c1: %s ; c2: %s', self.gc1, self.gc2)
-                logging.exception('c1_genes: %s (c1: %s)', self.c1_genes(genomes),
+                logging.exception('c1_genes: %s (c1: %s)', self.num_c1_genes(genomes),
                                   genomes[self.g1].cluster2genes[self.c1])
-                logging.exception('c2_genes: %s (c2: %s)', self.c2_genes(genomes),
+                logging.exception('c2_genes: %s (c2: %s)', self.num_c2_genes(genomes),
                                   genomes[self.g2].cluster2genes[self.c2])
                 logging.exception('link1: %s ; link2: %s ; c1_genes: %s ; c2_genes: %s',
-                                  link1, link2, self.c1_genes(genomes),
-                                  self.c2_genes(genomes))
+                                  link1, link2, self.num_c1_genes(genomes),
+                                  self.num_c2_genes(genomes))
                 raise
         self.link1 = link1
         self.link2 = link2
