@@ -69,7 +69,7 @@ class ClusterPair(object):
 #        logging.debug('Gene %s is in mp.gene2ortho.', gene)
         bioclusters = []
         for orthoclust in mp.gene2ortho[gene]:
-            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
+#            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
             for xeno_gene in mp.ortho2genes[orthoclust]:
                 # Extract LOCUS from gene name, find species from it.
                 xeno_species = xeno_gene.rsplit(':')[-1]
@@ -78,9 +78,8 @@ class ClusterPair(object):
                 if xeno_gene in xeno_gene2clusters:
                     for clnum in xeno_gene2clusters[xeno_gene]:
                         xeno_cluster = cluster(xeno_species, clnum)
-                        bioclusters.extend(xeno_cluster)
-                        logging.debug('\txeno_gene %s belongs to %s', xeno_gene,
-                                      xeno_cluster)
+                        bioclusters.append(xeno_cluster)
+#                        logging.debug('\txeno_gene %s belongs to %s', xeno_gene, xeno_cluster)
         return bioclusters
 
 
@@ -164,9 +163,9 @@ class ClusterPair(object):
         # Make /tmp file and open it for writing.
         with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
             for gene1, gene2 in itertools.product(gl1, gl2):
-                seq1 = genomes[self.g1].get_protein(gene1)
+                seq1 = genomes[self.g1].get_protein(gene1.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene1, seq1))
-                seq2 = genomes[self.g2].get_protein(gene2)
+                seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
             # Run usearch.
