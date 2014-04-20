@@ -1120,6 +1120,7 @@ def main():
                 if cp.link1 > 0 or cp.link2 > 0:
                     # Calculate gene-level protein identities in clusters.
                     cp.CDS_identities(genomes)
+                    print(cp)
                     sys.exit()
                     # Calculate average protein identities in clusters.
                     cp.average_identities(genomes)

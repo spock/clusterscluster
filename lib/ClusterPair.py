@@ -1,10 +1,9 @@
 from __future__ import print_function
 import logging
 import itertools
-import csv
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
-from utils import usearch
+from utils import usearch, SymKeyDict
 
 
 cluster = namedtuple('Cluster', ['genome', 'number'])
@@ -39,8 +38,10 @@ class ClusterPair(object):
         # Counters of genes in c1 and c2.
         self.c1_genes = 0
         self.c2_genes = 0
-        # Gene-level protein identities, identities[g1][g2] = float; g1/g2 must be sorted
-        self.protein_identities = {}
+        # Gene-level protein identities, identities[(g1, g2)] = float,
+        # symmetric (setting (g1, g2) makes (g2, g1) also accessible);
+        # g1 and g2 are locus_tag:genome_id strings.
+        self.protein_identities = SymKeyDict()
 
 
     def num_c1_genes(self, genomes):
@@ -165,6 +166,8 @@ class ClusterPair(object):
         # Make /tmp file and open it for writing.
         with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
             for gene1, gene2 in itertools.product(gl1, gl2):
+                # FIXME: make sure gene1 is always from gl1 and gene2 from gl2.
+                logging.debug('gene1, gene2: %s, %s', gene1, gene2)
                 seq1 = genomes[self.g1].get_protein(gene1.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene1, seq1))
                 seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
@@ -178,18 +181,20 @@ class ClusterPair(object):
                 query, target, identity = row.split('\t')
                 gene_pairs.append(GP(identity, query, target))
             del results, results_list, identity, query, target
-        # Sort gene pairs by identity.
+        # Sort gene pairs by identity, descending order.
+        # FIXME: make sure this is descending.
         gene_pairs.sort()
         print(gene_pairs)
+        # Two lists to check that we have not yet seen genes from c1 and c2.
+        seen_1 = []
+        seen_2 = []
         for pair in gene_pairs:
-            # check if this pair is already stored; if not - save it, if yes - compare, and overwrite existing with higher identity
-            # only allow 1, best similarity pair for each gene pair
-            # hide "sorted keys" behind a class, enveloping a dict?...
-        return
-        if g1 in protein_identities or
-           g2 in protein_identities and
-           (g1 in protein_identities and g2 in protein_identities[g1]) or
-           (g2 in protein_identities and g1 in protein_identities[g2]):
-            continue # similarity[g1][g2] = 0.6, symmetric
-        else:
-            protein_identities[g1] = {g2: identity}
+            if pair.g1 in seen_1 or pair.g2 in seen_2:
+                # at least one of the genes already has a pair
+                logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
+                continue
+            # else: save a new gene identity pair!
+            self.protein_identities[(pair.g1, pair.g2)] = pair.identity
+            seen_1.append(pair.g1)
+            seen_2.append(pair.g2)
+        del gene_pairs, seen_1, seen_2
