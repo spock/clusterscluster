@@ -39,6 +39,8 @@ class ClusterPair(object):
         # Counters of genes in c1 and c2.
         self.c1_genes = 0
         self.c2_genes = 0
+        # Gene-level protein identities, identities[g1][g2] = float; g1/g2 must be sorted
+        self.protein_identities = {}
 
 
     def num_c1_genes(self, genomes):
@@ -168,8 +170,8 @@ class ClusterPair(object):
                 seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
-            # Run usearch, once.
-            results = usearch(seqfile.name)
+            # Run usearch, once. FIXME: only do FULL later for chosen genepairs.
+            results = usearch(seqfile.name, full = True)
             # Parse results into a list of tuples, each tuple - 1 gene pair.
             results_list = results.strip().split('\n')
             for row in results_list:
@@ -179,11 +181,15 @@ class ClusterPair(object):
         # Sort gene pairs by identity.
         gene_pairs.sort()
         print(gene_pairs)
+        for pair in gene_pairs:
+            # check if this pair is already stored; if not - save it, if yes - compare, and overwrite existing with higher identity
+            # only allow 1, best similarity pair for each gene pair
+            # hide "sorted keys" behind a class, enveloping a dict?...
         return
-#        for pair in gene_pairs:
-#            only allow 1, best similarity pair for each gene pair
-#        if g1 in similarities, or g2 in similarities, (g1 in s and g2 in s[g1]) or (g2 in s and g1 in s[g2])
-#            continue # similarity[g1][g2] = 0.6, symmetric
-#        else:
-#            similarities[g1] = {g2: similarity}
-#            similarities[g2] = {g1: similarity}
+        if g1 in protein_identities or
+           g2 in protein_identities and
+           (g1 in protein_identities and g2 in protein_identities[g1]) or
+           (g2 in protein_identities and g1 in protein_identities[g2]):
+            continue # similarity[g1][g2] = 0.6, symmetric
+        else:
+            protein_identities[g1] = {g2: identity}
