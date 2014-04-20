@@ -169,7 +169,7 @@ class ClusterPair(object):
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
             # Run usearch.
-            results = usearch(seqfile)
+            results = usearch(seqfile.name)
             print(results)
             return
             # Use csv to parse results into a list of tuples

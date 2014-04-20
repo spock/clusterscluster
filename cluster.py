@@ -1111,6 +1111,7 @@ def main():
             for cl1, cl2 in [(cluster(g1, c1), cluster(g2, c2))
                            for c1 in genomes[g1].clusters
                            for c2 in genomes[g2].clusters]:
+                # FIXME: skip self-self clusters.
                 cp = ClusterPair(cl1, cl2)
                 # Calculate the number of orthologous links.
                 cp.assign_orthologous_link(mp, genomes, args)

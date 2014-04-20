@@ -32,12 +32,12 @@ def usearch(interleaved, cutoff = 0.4, full = False):
     full: perform full Dynamic Programming search (-fulldp), usually improves
     percent identity.
     '''
-    args = ['usearch']
+    usearch = ['usearch']
     if full:
-        args.append('-fulldp')
-    args.extend(['-id', cutoff, '-pairs_global', interleaved, '-userfields',
-                 'query+target+id,', '-userout', '/dev/stdout'])
-    out, err, retcode = execute(args)
+        usearch.append('-fulldp')
+    usearch.extend(['-id', str(cutoff), '-pairs_global', interleaved, '-userfields',
+                 'query+target+id', '-userout', '/dev/stdout'])
+    out, err, retcode = execute(usearch)
     if retcode != 0:
         logging.error('usearch failed with %d: %r while searching %r, full output follows:\n%s',
                       retcode, err, interleaved, out)
