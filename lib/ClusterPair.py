@@ -152,7 +152,7 @@ class ClusterPair(object):
     def CDS_identities(self, genomes):
         '''
         Calculate per-gene-pair protein identity, and also average
-        protein identity for cluster pair.
+        protein identity for cluster pair. Save these to self.
         '''
         GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
         # Get genelists for both clusters.
@@ -168,17 +168,19 @@ class ClusterPair(object):
                 seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
-            # Run usearch.
+            # Run usearch, once.
             results = usearch(seqfile.name)
-            print(results)
-            return
-            # Use csv to parse results into a list of tuples
-            reader = csv.reader([results])
-            for row in reader:
-                gene_pairs.append(GP(row[2], row[0], row[1])) # identity, query, target
+            # Parse results into a list of tuples, each tuple - 1 gene pair.
+            results_list = results.strip().split('\n')
+            for row in results_list:
+                query, target, identity = row.split('\t')
+                gene_pairs.append(GP(identity, query, target))
+            del results, results_list, identity, query, target
         # Sort gene pairs by identity.
-#        gene_pairs.sort()
-#        for pair in pairs:
+        gene_pairs.sort()
+        print(gene_pairs)
+        return
+#        for pair in gene_pairs:
 #            only allow 1, best similarity pair for each gene pair
 #        if g1 in similarities, or g2 in similarities, (g1 in s and g2 in s[g1]) or (g2 in s and g1 in s[g2])
 #            continue # similarity[g1][g2] = 0.6, symmetric

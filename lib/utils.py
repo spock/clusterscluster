@@ -36,7 +36,7 @@ def usearch(interleaved, cutoff = 0.4, full = False):
     if full:
         usearch.append('-fulldp')
     usearch.extend(['-id', str(cutoff), '-pairs_global', interleaved, '-userfields',
-                 'query+target+id', '-userout', '/dev/stdout'])
+                 'query+target+id', '-userout', '/dev/stdout', '-quiet'])
     out, err, retcode = execute(usearch)
     if retcode != 0:
         logging.error('usearch failed with %d: %r while searching %r, full output follows:\n%s',
