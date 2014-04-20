@@ -60,10 +60,13 @@ class ClusterPair(object):
         For the given `gene`,
         - find to which orthology group/cluster from `mp` it belongs,
         - check if other genes from that group are a part of some biosynthetic clusters,
-        - return the list of those biosynthetic clusters
+        - return the list of those biosynthetic clusters, where
+        - each is a Cluster(genome, number) named tuple.
         '''
         if gene not in mp.gene2ortho:
+#            logging.debug('Gene %s is NOT in mp.gene2ortho.', gene)
             return [] # `gene` does not belong to any group of orthologs
+#        logging.debug('Gene %s is in mp.gene2ortho.', gene)
         bioclusters = []
         for orthoclust in mp.gene2ortho[gene]:
             logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
@@ -92,16 +95,16 @@ class ClusterPair(object):
         '''
         links = 0
         if which == 1:
-            logging.debug("Looking at %s genes in cluster %s (2nd cluster is %s)...",
+            logging.debug("Looking at %s genes in cluster %s (2nd is %s)...",
                           len(genomes[self.g1].cluster2genes[self.c1]),
                           self.c1, self.gc2)
             for gene in genomes[self.g1].cluster2genes[self.c1]:
-                # Each 'gene' is a 'locus_tag:genome_id' string.
+                # 'gene' is a 'locus_tag:genome_id' string.
                 # FIXME: never finds anything
                 if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
         if which == 2:
-            logging.debug("Looking at %s genes in cluster %s (1st cluster is %s)...",
+            logging.debug("Looking at %s genes in cluster %s (1st is %s)...",
                           len(genomes[self.g2].cluster2genes[self.c2]),
                           self.c2, self.gc1)
             for gene in genomes[self.g2].cluster2genes[self.c2]:

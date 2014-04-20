@@ -292,11 +292,11 @@ class Genome(object):
 
     def load(self):
         '''
-        Parse GenBank file, make sequence and annotation easily accessible
-        as .record.
+        Parse antismash2 GenBank file, make sequence and annotation easily
+        accessible as .record.
         '''
         if self.records == None:
-            self.records = list(SeqIO.parse(self.infile, "genbank", generic_dna))
+            self.records = list(SeqIO.parse(self.as2file, "genbank", generic_dna))
             self.CDS = self.index_genbank_features('CDS', 'locus_tag')
             self.clusterindex = self.index_genbank_features('cluster', 'note')
 
