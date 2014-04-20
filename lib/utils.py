@@ -59,16 +59,18 @@ class SymKeyDict(dict):
     >>> test[k1] = 'ab' # set value using key k1
     >>> test
     2: {('a', 'b'): 'ab'}
-    >>> test[k2] # get value using the equivalent k2 key
+    >>> test[k2]        # get value using the equivalent k2 key
     3: 'ab'
     >>> test[k4] = 'ca' # set value using k4 key
-    >>> test[k3] # get value using k3 key
+    >>> test[k3]        # get value using k3 key
     4: 'ca'
     >>> test
     5: {('a', 'b'): 'ab', ('a', 'c'): 'ca'}
     >>> test[k2] = 'ba' # this overwrites the stored value
-    >>> test[k1] # proof
+    >>> test[k1]        # proof
     'ba'
+    >>> k2 in test      # though ('a', 'b') is stored as the key,
+    True                # ('b', 'a') is also reported as a valid key
     '''
 
     def __init__(self, *arg, **kw):
