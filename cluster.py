@@ -1122,17 +1122,20 @@ def main():
                     # Calculate gene-level and clusterpair-average protein identities in clusters.
                     cp.CDS_identities(genomes)
 #                    print(cp.protein_identities)
-                    if cp.avg_identity[0] > 0:
-                        print(cp.avg_identity)
-                    continue
+                    if cp.avg_identity[0] > 2: # FIXME: 0, 1 is for testing only
+                        logging.debug('Average identity of ', cp.gc1, cp.gc2,
+                                      cp.avg_identity)
+                        print(cp.protein_identities)
+                        # TODO: Optional, depends on args: end-trim non-similar genes?
+                        # Calculate gene order preservation (for similar genes).
+                        cp.gene_order(genomes)
+                        continue # FIXME
+                        # Calculate gene orienation preservation (for similar genes).
+                        cp.gene_strandedness(genomes)
+                        # Calculate predicted domains order preservation within similar genes.
+                        cp.domains(genomes)
+                    continue # FIXME
                     sys.exit()
-                    # TODO: Optional, depends on args: end-trim non-similar genes?
-                    # Calculate overall gene order preservation.
-                    cp.gene_order(genomes)
-                    # Calculate overall gene orienation preservation.
-                    cp.gene_strandedness(genomes)
-                    # Calculate predicted domains order preservation within genes.
-                    cp.domains(genomes)
                     # Calculate cluster-level nucleotide identity.
                     cp.nucleotide_similarity(genomes)
                     cluster_pairs.append(cp)

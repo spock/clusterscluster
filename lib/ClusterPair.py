@@ -224,3 +224,10 @@ class ClusterPair(object):
             sum_identities += float(pair.identity)
         self.avg_identity = (num_pairs, sum_identities / num_pairs)
         del gene_pairs, seen_1, seen_2, sum_identities, num_pairs
+
+
+    def gene_order(self, genomes):
+        '''
+        Are similar genes in the same order or not?
+        '''
+        pass
