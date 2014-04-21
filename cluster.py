@@ -1103,7 +1103,7 @@ def main():
     for g1 in genomes:
         genomes[g1].load()
         for g2 in genomes:
-            genomes[g2].load()
+            genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
             # iterate all possible cluster pairs between these 2 genomes;
             # can also parallelize here
             # Generate cluster pairs.
@@ -1120,7 +1120,8 @@ def main():
                 if cp.link1 > 0 or cp.link2 > 0:
                     # Calculate gene-level protein identities in clusters.
                     cp.CDS_identities(genomes)
-                    print(cp)
+                    print(cp.protein_identities)
+                    continue
                     sys.exit()
                     # Calculate average protein identities in clusters.
                     cp.average_identities(genomes)
@@ -1134,7 +1135,8 @@ def main():
                     # Calculate cluster-level nucleotide identity.
                     cp.nucleotide_similarity(genomes)
                     cluster_pairs.append(cp)
-            genomes[g2].unload()
+            if g1 != g2:
+                genomes[g2].unload()
         genomes[g1].unload()
     print('Processed %s cluster pairs.' % len(cluster_pairs))
 

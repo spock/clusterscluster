@@ -41,6 +41,10 @@ def usearch(interleaved, cutoff = 0.4, full = False):
     if retcode != 0:
         logging.error('usearch failed with %d: %r while searching %r, full output follows:\n%s',
                       retcode, err, interleaved, out)
+        print(' ==== dump of the file follows ==== ')
+        with open(interleaved) as fh:
+            for line in fh:
+                print(line, end="")
     else:
         return out
 

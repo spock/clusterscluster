@@ -299,6 +299,9 @@ class Genome(object):
             self.records = list(SeqIO.parse(self.as2file, "genbank", generic_dna))
             self.CDS = self.index_genbank_features('CDS', 'locus_tag')
             self.clusterindex = self.index_genbank_features('cluster', 'note')
+            logging.debug('Loaded Genome %s.', self.id)
+        else:
+            logging.debug('Genome %s was already loaded.', self.id)
 
 
     def unload(self):
@@ -310,6 +313,9 @@ class Genome(object):
             self.records = None
             self.CDS = None
             self.clusterindex = None
+            logging.debug('Unloaded Genome %s.', self.id)
+        else:
+            logging.debug('Genome %s was already unloaded.', self.id)
 
 
     def index_genbank_features(self, feature_type, qualifier):

@@ -102,7 +102,6 @@ class ClusterPair(object):
                           self.c1, self.gc2)
             for gene in genomes[self.g1].cluster2genes[self.c1]:
                 # 'gene' is a 'locus_tag:genome_id' string.
-                # FIXME: never finds anything
                 if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                     links += 1
         if which == 2:
@@ -165,25 +164,39 @@ class ClusterPair(object):
         gene_pairs = []
         # Make /tmp file and open it for writing.
         with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
+            # FIXME: avoid comparing cl. 2 to 9, and then later 9 to 2, when genome is the same
             for gene1, gene2 in itertools.product(gl1, gl2):
-                # FIXME: make sure gene1 is always from gl1 and gene2 from gl2.
-                logging.debug('gene1, gene2: %s, %s', gene1, gene2)
+                #logging.debug('gene1, gene2: %s, %s', gene1, gene2)
                 seq1 = genomes[self.g1].get_protein(gene1.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene1, seq1))
                 seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
-            # Run usearch, once. FIXME: only do FULL later for chosen genepairs.
-            results = usearch(seqfile.name, full = True)
-            # Parse results into a list of tuples, each tuple - 1 gene pair.
-            results_list = results.strip().split('\n')
+            # seqfile is open for writing when usearch runs, so better at least flush it
+            seqfile.flush()
+            # Run usearch, once. TODO: do FULL later for chosen genepairs?
+            results = usearch(seqfile.name, full = False)
+            if results == '':
+                # empty result: nothing above the cut-off
+                return
+            if results == None:
+                # error in usearch
+                logging.exception('usearch failed, see output above')
+                raise Exception('UsearchFailedError')
+            # Parse results into a list of tuples, each tuple is 1 gene pair.
+            results_list = results.strip('\n').split('\n')
             for row in results_list:
-                query, target, identity = row.split('\t')
-                gene_pairs.append(GP(identity, query, target))
+                try:
+                    query, target, identity = row.split('\t')
+                    gene_pairs.append(GP(identity, query, target))
+                except ValueError:
+                    print('row:')
+                    print(row)
+                    logging.exception('Failed to parse usearch output.')
+                    raise Exception('UsearchOutputParseError')
             del results, results_list, identity, query, target
         # Sort gene pairs by identity, descending order.
-        # FIXME: make sure this is descending.
-        gene_pairs.sort()
+        gene_pairs.sort(reverse = True)
         print(gene_pairs)
         # Two lists to check that we have not yet seen genes from c1 and c2.
         seen_1 = []
