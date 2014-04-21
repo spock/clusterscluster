@@ -42,6 +42,9 @@ class ClusterPair(object):
         # symmetric (setting (g1, g2) makes (g2, g1) also accessible);
         # g1 and g2 are locus_tag:genome_id strings.
         self.protein_identities = SymKeyDict()
+        # Single tuple for average gene-level protein identity,
+        # (number_of_gene_pairs, average_identity)
+        self.avg_identity = None
 
 
     def num_c1_genes(self, genomes):
@@ -154,7 +157,8 @@ class ClusterPair(object):
     def CDS_identities(self, genomes):
         '''
         Calculate per-gene-pair protein identity, and also average
-        protein identity for cluster pair. Save these to self.
+        protein identity for cluster pair. Calculate average protein identity.
+        Save all values to self.
         '''
         GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
         # Get genelists for both clusters.
@@ -177,7 +181,9 @@ class ClusterPair(object):
             # Run usearch, once. TODO: do FULL later for chosen genepairs?
             results = usearch(seqfile.name, full = False)
             if results == '':
-                # empty result: nothing above the cut-off
+                # empty result: nothing above the cut-off, no similar gene pairs
+                self.avg_identity = (0, 0.0)
+                seqfile.close()
                 return
             if results == None:
                 # error in usearch
@@ -197,10 +203,14 @@ class ClusterPair(object):
             del results, results_list, identity, query, target
         # Sort gene pairs by identity, descending order.
         gene_pairs.sort(reverse = True)
-        print(gene_pairs)
+#        print(gene_pairs)
         # Two lists to check that we have not yet seen genes from c1 and c2.
         seen_1 = []
         seen_2 = []
+        # Counter of gene pairs.
+        num_pairs = 0
+        # Cumulative sum of identities, for average.
+        sum_identities = 0.0
         for pair in gene_pairs:
             if pair.g1 in seen_1 or pair.g2 in seen_2:
                 # at least one of the genes already has a pair
@@ -210,4 +220,7 @@ class ClusterPair(object):
             self.protein_identities[(pair.g1, pair.g2)] = pair.identity
             seen_1.append(pair.g1)
             seen_2.append(pair.g2)
-        del gene_pairs, seen_1, seen_2
+            num_pairs += 1
+            sum_identities += float(pair.identity)
+        self.avg_identity = (num_pairs, sum_identities / num_pairs)
+        del gene_pairs, seen_1, seen_2, sum_identities, num_pairs

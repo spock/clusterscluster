@@ -1115,17 +1115,18 @@ def main():
                 if cl1 == cl2:
                     continue
                 cp = ClusterPair(cl1, cl2)
+                # TODO: from here on this seems parallelizible.
                 # Calculate the number of orthologous links.
                 cp.assign_orthologous_link(mp, genomes, args)
                 if cp.link1 > 0 or cp.link2 > 0:
-                    # Calculate gene-level protein identities in clusters.
+                    # Calculate gene-level and clusterpair-average protein identities in clusters.
                     cp.CDS_identities(genomes)
-                    print(cp.protein_identities)
+#                    print(cp.protein_identities)
+                    if cp.avg_identity[0] > 0:
+                        print(cp.avg_identity)
                     continue
                     sys.exit()
-                    # Calculate average protein identities in clusters.
-                    cp.average_identities(genomes)
-                    # Optional, depends on args: end-trim non-similar genes?
+                    # TODO: Optional, depends on args: end-trim non-similar genes?
                     # Calculate overall gene order preservation.
                     cp.gene_order(genomes)
                     # Calculate overall gene orienation preservation.

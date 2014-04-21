@@ -23,7 +23,7 @@ def execute(commands, inputs = None):
         raise
 
 
-def usearch(interleaved, cutoff = 0.4, full = False):
+def usearch(interleaved, cutoff = 0.5, full = False):
     '''
     Run usearch on interleaved sequences file, return output as text (3 columns:
     query ID, target ID, percent identity).
@@ -43,8 +43,7 @@ def usearch(interleaved, cutoff = 0.4, full = False):
                       retcode, err, interleaved, out)
         print(' ==== dump of the file follows ==== ')
         with open(interleaved) as fh:
-            for line in fh:
-                print(line, end="")
+            print(fh.read())
     else:
         return out
 
