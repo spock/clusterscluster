@@ -1,9 +1,11 @@
 from __future__ import print_function
 import logging
 import itertools
+from scipy import stats
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
 from utils import usearch, SymKeyDict
+from lib.Genome import GeneOrder, FeatureTuple
 
 
 cluster = namedtuple('Cluster', ['genome', 'number'])
@@ -45,6 +47,9 @@ class ClusterPair(object):
         # Single tuple for average gene-level protein identity,
         # (number_of_gene_pairs, average_identity)
         self.avg_identity = None
+        # Dict of genome1 genes mapped to genome2 genes (by locus_tag:genomeid),
+        # only for genes which have above-cutoff identity.
+        self.gene1_to_gene2 = {}
 
 
     def num_c1_genes(self, genomes):
@@ -158,6 +163,7 @@ class ClusterPair(object):
         '''
         Calculate per-gene-pair protein identity, and also average
         protein identity for cluster pair. Calculate average protein identity.
+        Populate lists self.genes_with_pairs[genome] with geneids which have pairs.
         Save all values to self.
         '''
         GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
@@ -193,8 +199,10 @@ class ClusterPair(object):
             results_list = results.strip('\n').split('\n')
             for row in results_list:
                 try:
+                    # query, target should be from g1, g2, respectively
                     query, target, identity = row.split('\t')
                     gene_pairs.append(GP(identity, query, target))
+                    self.gene1_to_gene2[query] = target
                 except ValueError:
                     print('row:')
                     print(row)
@@ -230,4 +238,47 @@ class ClusterPair(object):
         '''
         Are similar genes in the same order or not?
         '''
+        # For clusters 1 and 2, for genes which have identity pairs,
+        # build a list of per-genome gene indexes (i.e. 0, 1, 2...)
+        # (from lower to higher cluster coordinate).
+        inds = {self.gc1: [], self.gc2: []}
+        # 'gene' is a GeneOrder namedtuple, (start, strand, locus_tag:genome_id).
+        for gene in genomes[self.g1].orderstrands[self.c1]: # iterate all cluster 1 genes
+            if gene.geneid in self.gene1_to_gene2: # check if this gene has an identity pair
+                # Offset indices by 1 (they start from 0, might be problematic for stats).
+#                print(genomes[self.g1].orderstrands[self.c1])
+                inds[self.gc1].append(genomes[self.g1].orderstrands[self.c1].index(gene) + 1)
+                # Get the corresponding gene position from cluster 2.
+                gene2_name = self.gene1_to_gene2[gene.geneid]
+                gene2_feature = genomes[self.g2].get_feature_by_locustag(gene2_name.split(':')[0]).feature
+                gene2 = GeneOrder(int(gene2_feature.location.start.position), gene2_feature.strand, gene2_name)
+                inds[self.gc2].append(genomes[self.g2].orderstrands[self.c2].index(gene2) + 1)
+#                print(genomes[self.g2].orderstrands[self.c2])
+        print(inds) # FIXME: debug only
+        # spearman: monotonicity (same gene order, disregarding distances), less sensitive to outliers
+        # pearson: linearity (same gene order AND similar distances); not really applicable: "a measure of the linear relationship between two continuous random variables"
+        # kendall: unlike spearman and pearson, here each point contributes equally
+        # magnitude: kendall < spearman
+        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+        print('P:', stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+        print('K:', stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+        # BioPython also has these stat routines:
+#        import numpy as np
+#        from Bio import Cluster
+#        array1 = np.array(inds[self.g1])
+#        array2 = np.array(inds[self.g2])
+#        self.spearman = 1 - Cluster.distancematrix((array1, array2), dist="s")[1][0]
+#        self.pearson = 1 - Cluster.distancematrix((array1, array2), dist="c")[1][0]
+#        self.kendall = 1 - Cluster.distancematrix((array1, array2), dist="k")[1][0]
+        # for strands: split every list in 2 (by strand), run stats on list pairs, pick the highest score
+
+
+    def domains(self, genomes):
+        '''
+        Calculate collinearity of predicted domains and their substrates
+        in similar genes.
+        '''
+        pass
+
+    def nucleotide_similarity(self, genomes):
         pass

@@ -23,7 +23,7 @@ def execute(commands, inputs = None):
         raise
 
 
-def usearch(interleaved, cutoff = 0.5, full = False):
+def usearch(interleaved, cutoff = 0.4, full = False):
     '''
     Run usearch on interleaved sequences file, return output as text (3 columns:
     query ID, target ID, percent identity).

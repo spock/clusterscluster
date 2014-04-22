@@ -13,6 +13,7 @@ For a relatively detailed example, please see <article URL>
 Dependencies
 ============
 antismash2 (possibly *modified*, see below)
+SciPy
 Custom-edited Inparanoid 4.1 (included)
 Custom-edited quickparanoid (included)
 inparanoid:

@@ -7,12 +7,17 @@ from shutil import rmtree, move
 from os.path import join, exists
 from multiprocessing import cpu_count
 from bx.intervals.intersection import Interval, IntervalTree
+from collections import namedtuple
 from lib import utils
 from lib.gb2fasta import gb2fasta
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
 # Extension trimming is implemented as --no-extensions in antismash2,
 # making this import obsolete.
 from lib import hmm_detection
+
+# geneid is locus_tag:genome_id
+GeneOrder = namedtuple('GeneOrder', ['start', 'strand', 'geneid'])
+FeatureTuple = namedtuple('FeatureTuple', ['feature', 'record_index', 'feature_index'])
 
 
 class Genome(object):
@@ -44,7 +49,7 @@ class Genome(object):
             self.faafile = ''
             self.number2products = {} # numeric clusters to their products
             self.coords2numbers = {} # coords of cluster to its number
-            self.cluster2genes = {} # number to a list
+            self.cluster2genes = {} # cluster number to a list of locus_tags
             self.gene2clusters = {} # gene ID to a list of cluster numbers
             self.clustersizes = {} # cluster number to cluster size, bps
             self.is_genecluster_parsed = False
@@ -57,6 +62,9 @@ class Genome(object):
             # These values are for the parent to check.
             self.antismash2_reused = False
             self.antismash_warning_shown = False
+            # Dict of per-cluster ordered lists of genes with strands
+            # for later collinearity analysis.
+            self.orderstrands = {}
 
 #            organism = {} # maps accessions to 'organism' field
             primary_length = 0 # current primary accession sequence length
@@ -169,7 +177,7 @@ class Genome(object):
     def parse_gene_cluster_relations(self, args):
         '''
         Assign genes to clusters, clusters to genes, and fill other useful
-        maps and lists.
+        maps and lists (such as GeneOrder/Strand lists).
         args: original arguments namespace from parent/main (args.trim etc)
         '''
         rulesdict = hmm_detection.create_rules_dict()
@@ -233,6 +241,7 @@ class Genome(object):
                                 raise
                     clustertrees[record_number].add_interval(Interval(start, end))
                     self.cluster2genes[cluster_number] = []
+                    self.orderstrands[cluster_number] = []
                     self.clusters.append(cluster_number)
                     self.number2products[cluster_number] = f.qualifiers['product'][0]
                     # Start/end coords theoretically can collide between
@@ -282,7 +291,11 @@ class Genome(object):
                             cluster_serial = self.coords2numbers[(cluster.start, cluster.end)]
                             self.cluster2genes[cluster_serial].append(gene_name)
                             self.gene2clusters[gene_name].append(cluster_serial)
+                            self.orderstrands[cluster_serial].append(GeneOrder(int(f.location.start.position), f.strand, gene_name))
                         del gene_name, cluster_serial
+        for k in self.orderstrands.iterkeys():
+            # In each cluster, sort genes ASCending by start position.
+            self.orderstrands[k].sort()
         print('\t%s: %s clusters populated with %s genes' % (self.id,
                                                              len(self.cluster2genes),
                                                              self.total_genes_in_clusters))
@@ -349,9 +362,17 @@ class Genome(object):
         '''
         Given a gene ID (locus_tag), return amino acid sequence.
         '''
-        record_index, index = self.CDS[geneid]
-        feature = self.records[record_index].features[index]
-        if 'translation' in feature.qualifiers:
-            return feature.qualifiers['translation'][0]
+        feature_tuple = self.get_feature_by_locustag(geneid)
+        if 'translation' in feature_tuple.feature.qualifiers:
+            return feature_tuple.feature.qualifiers['translation'][0]
         else:
-            return feature.extract(self.records[record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)
+            return feature_tuple.feature.extract(self.records[feature_tuple.record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)
+
+
+    def get_feature_by_locustag(self, geneid):
+        '''
+        Given a gene ID (locus_tag), return namedtuple
+        (feature, record_index, feature_index).
+        '''
+        record_index, index = self.CDS[geneid]
+        return FeatureTuple(self.records[record_index].features[index], record_index, index)

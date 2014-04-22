@@ -1107,7 +1107,7 @@ def main():
             # iterate all possible cluster pairs between these 2 genomes;
             # can also parallelize here
             # Generate cluster pairs.
-            print('Constructing orthology gene-based cluster links.')
+#            print('Constructing orthology gene-based cluster links.')
             for cl1, cl2 in [(cluster(g1, c1), cluster(g2, c2))
                            for c1 in genomes[g1].clusters
                            for c2 in genomes[g2].clusters]:
@@ -1121,21 +1121,16 @@ def main():
                 if cp.link1 > 0 or cp.link2 > 0:
                     # Calculate gene-level and clusterpair-average protein identities in clusters.
                     cp.CDS_identities(genomes)
-#                    print(cp.protein_identities)
-                    if cp.avg_identity[0] > 2: # FIXME: 0, 1 is for testing only
-                        logging.debug('Average identity of ', cp.gc1, cp.gc2,
-                                      cp.avg_identity)
-                        print(cp.protein_identities)
+                    if cp.avg_identity[0] > 0:
+                        logging.debug('Average identity of %s and %s is %s ',
+                                      cp.gc1, cp.gc2, cp.avg_identity)
+                        print(cp.protein_identities) # FIXME: for debug only
                         # TODO: Optional, depends on args: end-trim non-similar genes?
-                        # Calculate gene order preservation (for similar genes).
-                        cp.gene_order(genomes)
-                        continue # FIXME
-                        # Calculate gene orienation preservation (for similar genes).
-                        cp.gene_strandedness(genomes)
+                        if cp.avg_identity[0] > 2:
+                            # Calculate gene order and orientation (strandedness) preservation (for similar genes).
+                            cp.gene_order(genomes)
                         # Calculate predicted domains order preservation within similar genes.
                         cp.domains(genomes)
-                    continue # FIXME
-                    sys.exit()
                     # Calculate cluster-level nucleotide identity.
                     cp.nucleotide_similarity(genomes)
                     cluster_pairs.append(cp)
