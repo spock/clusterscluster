@@ -1124,7 +1124,7 @@ def main():
                     if cp.avg_identity[0] > 0:
                         logging.debug('Average identity of %s and %s is %s ',
                                       cp.gc1, cp.gc2, cp.avg_identity)
-                        print(cp.protein_identities) # FIXME: for debug only
+#                        print(cp.protein_identities)
                         # TODO: Optional, depends on args: end-trim non-similar genes?
                         if cp.avg_identity[0] > 2:
                             # Calculate gene order and orientation (strandedness) preservation (for similar genes).

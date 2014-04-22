@@ -238,6 +238,10 @@ class ClusterPair(object):
         '''
         Are similar genes in the same order or not?
         '''
+        # FIXME: some gene indices are present more than once!!!! Examples:
+        # {Cluster(genome='GMON_MP13002', number=6): [15, 14, 13, 10, 13], Cluster(genome='KRI_MP130_17', number=9): [6, 7, 8, 9, 10]}
+        # {Cluster(genome='SBA_MP131_18', number=35): [2, 21, 23, 24, 25], Cluster(genome='SBA_MP131_18', number=5): [18, 23, 20, 20, 20]}
+        # {Cluster(genome='SBA_MP131_18', number=10): [1, 4, 6, 9], Cluster(genome='SBA_MP131_18', number=33): [22, 22, 22, 22]}
         # For clusters 1 and 2, for genes which have identity pairs,
         # build a list of per-genome gene indexes (i.e. 0, 1, 2...)
         # (from lower to higher cluster coordinate).
