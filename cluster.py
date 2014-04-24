@@ -41,6 +41,7 @@ import sys
 import logging
 import os
 import glob
+import csv
 
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
@@ -1097,6 +1098,19 @@ def main():
 
     # Processed cluster pairs with at least 1 ortho-link.
     cluster_pairs = []
+    cluster_pairs_counter = 0
+
+    # Open the output CSV file for writing, prepare CSV writer.
+    csvout = open(join(args.project, 'final_results.csv'), 'w')
+    writer = csv.writer(csvout, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    # Output header.
+    header = ['is_intra', 'genome1_ID', 'genome2_ID', 'species1', 'species2',
+              'cluster1', 'cluster2', 'type1', 'type2', 'genes1_count',
+              'genes2_count', 'size1_kb', 'size2_kb', 'ortholinks_count1',
+              'ortholinks_count2', 'similar_genes_count',
+              'avg_protein_identity', 'P', 'K', 'S']
+    writer.writerow(header)
+    del header
 
     # For efficiency, sequence-level comparisons are grouped together, so as
     # to use every loaded genome many times before unloading.
@@ -1128,7 +1142,7 @@ def main():
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
             #print(cl1, cl2)
-            # TODO: from here on this seems parallelizible.
+            # FIXME: from here on this seems parallelizible.
             # Calculate the number of orthologous links.
             cp.assign_orthologous_link(mp, genomes, args)
             if cp.link1 > 0 or cp.link2 > 0:
@@ -1146,10 +1160,20 @@ def main():
                     #cp.domains(genomes)
                 # Calculate cluster-level nucleotide identity.
                 #cp.nucleotide_similarity(genomes)
-                cluster_pairs.append(cp)
+                #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
+                cluster_pairs_counter += 1
+                row = [cp.intra, genomes[g1].id, genomes[g2].id, genomes[g1].species,
+                       genomes[g2].species, cp.c1, cp.c2, genomes[g1].number2products[cp.c1],
+                       genomes[g2].number2products[cp.c2], cp.c1_genes, cp.c2_genes,
+                       genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
+                       cp.link1, cp.link2, cp.avg_identity[0], cp.avg_identity[1],
+                       cp.pearson, cp.kendall, cp.spearman]
+                writer.writerow(row)
         if g1 != g2:
             genomes[g2].unload()
-    print('Processed %s cluster pairs.' % len(cluster_pairs))
+    #print('Processed %s cluster pairs.' % len(cluster_pairs))
+    print('Processed %s cluster pairs.' % cluster_pairs_counter)
+    csvout.close()
 
     return 0
 
