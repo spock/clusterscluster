@@ -262,9 +262,9 @@ class ClusterPair(object):
         # pearson: linearity (same gene order AND similar distances); not really applicable: "a measure of the linear relationship between two continuous random variables"
         # kendall: unlike spearman and pearson, here each point contributes equally
         # magnitude: kendall < spearman
-        self.pearson  = stats.pearsonr(inds[self.gc1], inds[self.gc2])[0])
-        self.kendall  = stats.kendalltau(inds[self.gc1], inds[self.gc2])[0])
-        self.spearman = stats.spearmanr(inds[self.gc1], inds[self.gc2])[0])
+        self.pearson  = stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]
+        self.kendall  = stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]
+        self.spearman = stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]
         # BioPython also has these stat routines:
 #        import numpy as np
 #        from Bio import Cluster
