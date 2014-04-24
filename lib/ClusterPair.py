@@ -202,7 +202,6 @@ class ClusterPair(object):
                     # query, target should be from g1, g2, respectively
                     query, target, identity = row.split('\t')
                     gene_pairs.append(GP(identity, query, target))
-                    self.gene1_to_gene2[query] = target
                 except ValueError:
                     print('row:')
                     print(row)
@@ -225,6 +224,7 @@ class ClusterPair(object):
                 logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
                 continue
             # else: save a new gene identity pair!
+            self.gene1_to_gene2[pair.g1] = pair.g2
             self.protein_identities[(pair.g1, pair.g2)] = pair.identity
             seen_1.append(pair.g1)
             seen_2.append(pair.g2)
@@ -238,10 +238,16 @@ class ClusterPair(object):
         '''
         Are similar genes in the same order or not?
         '''
-        # FIXME: some gene indices are present more than once!!!! Examples:
-        # {Cluster(genome='GMON_MP13002', number=6): [15, 14, 13, 10, 13], Cluster(genome='KRI_MP130_17', number=9): [6, 7, 8, 9, 10]}
-        # {Cluster(genome='SBA_MP131_18', number=35): [2, 21, 23, 24, 25], Cluster(genome='SBA_MP131_18', number=5): [18, 23, 20, 20, 20]}
-        # {Cluster(genome='SBA_MP131_18', number=10): [1, 4, 6, 9], Cluster(genome='SBA_MP131_18', number=33): [22, 22, 22, 22]}
+        # FIXME: some inter-species cluster pairs are present more than once!!!!
+        # FIXME: ClusterPair is simply evaluated twice, first with GMON/6 as 1st cluster, then with KRI/9 as 1st.
+        #{Cluster(genome='GMON_MP13002', number=6): [10, 13, 14, 15], Cluster(genome='KRI_MP130_17', number=9): [9, 10, 7, 6]}
+        #S: -0.8
+        #P: -0.676123403783
+        #K: -0.666666666667
+        #{Cluster(genome='GMON_MP13002', number=6): [15, 14, 10, 13], Cluster(genome='KRI_MP130_17', number=9): [6, 7, 9, 10]}
+        #S: -0.8
+        #P: -0.676123403783
+        #K: -0.666666666667
         # For clusters 1 and 2, for genes which have identity pairs,
         # build a list of per-genome gene indexes (i.e. 0, 1, 2...)
         # (from lower to higher cluster coordinate).
@@ -263,9 +269,9 @@ class ClusterPair(object):
         # pearson: linearity (same gene order AND similar distances); not really applicable: "a measure of the linear relationship between two continuous random variables"
         # kendall: unlike spearman and pearson, here each point contributes equally
         # magnitude: kendall < spearman
-        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
         print('P:', stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
         print('K:', stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
         # BioPython also has these stat routines:
 #        import numpy as np
 #        from Bio import Cluster

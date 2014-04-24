@@ -1130,9 +1130,9 @@ def main():
                             # Calculate gene order and orientation (strandedness) preservation (for similar genes).
                             cp.gene_order(genomes)
                         # Calculate predicted domains order preservation within similar genes.
-                        cp.domains(genomes)
+                        #cp.domains(genomes)
                     # Calculate cluster-level nucleotide identity.
-                    cp.nucleotide_similarity(genomes)
+                    #cp.nucleotide_similarity(genomes)
                     cluster_pairs.append(cp)
             if g1 != g2:
                 genomes[g2].unload()
