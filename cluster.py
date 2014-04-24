@@ -1112,8 +1112,7 @@ def main():
     writer.writerow(header)
     del header
 
-    # For efficiency, sequence-level comparisons are grouped together, so as
-    # to use every loaded genome many times before unloading.
+    # Every loaded genome (g1) is expected to be used many times before unloading.
     combinations_counter = 0 # to track progress, outer genomes loop only
     total_combinations = len(list(combinations_with_replacement(genomes.keys(), r = 2)))
     prev_g1 = None # tracker of the previous g1 genome, to know when to unload it
@@ -1162,12 +1161,12 @@ def main():
                 #cp.nucleotide_similarity(genomes)
                 #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
                 cluster_pairs_counter += 1
-                row = [cp.intra, genomes[g1].id, genomes[g2].id, genomes[g1].species,
+                row = [int(cp.intra), genomes[g1].id, genomes[g2].id, genomes[g1].species,
                        genomes[g2].species, cp.c1, cp.c2, genomes[g1].number2products[cp.c1],
                        genomes[g2].number2products[cp.c2], cp.c1_genes, cp.c2_genes,
                        genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
-                       cp.link1, cp.link2, cp.avg_identity[0], cp.avg_identity[1],
-                       cp.pearson, cp.kendall, cp.spearman]
+                       int(cp.link1), int(cp.link2), cp.avg_identity[0],
+                       round(cp.avg_identity[1], 1), cp.pearson, cp.kendall, cp.spearman]
                 writer.writerow(row)
         if g1 != g2:
             genomes[g2].unload()
