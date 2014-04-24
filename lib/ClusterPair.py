@@ -50,6 +50,10 @@ class ClusterPair(object):
         # Dict of genome1 genes mapped to genome2 genes (by locus_tag:genomeid),
         # only for genes which have above-cutoff identity.
         self.gene1_to_gene2 = {}
+        # Correlation coefficients for gene order preservation.
+        self.kendall = 0.0
+        self.pearson = 0.0
+        self.spearman = 0.0
 
 
     def num_c1_genes(self, genomes):
@@ -258,9 +262,9 @@ class ClusterPair(object):
         # pearson: linearity (same gene order AND similar distances); not really applicable: "a measure of the linear relationship between two continuous random variables"
         # kendall: unlike spearman and pearson, here each point contributes equally
         # magnitude: kendall < spearman
-#        print('P:', stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
-#        print('K:', stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
-#        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+        self.pearson  = stats.pearsonr(inds[self.gc1], inds[self.gc2])[0])
+        self.kendall  = stats.kendalltau(inds[self.gc1], inds[self.gc2])[0])
+        self.spearman = stats.spearmanr(inds[self.gc1], inds[self.gc2])[0])
         # BioPython also has these stat routines:
 #        import numpy as np
 #        from Bio import Cluster

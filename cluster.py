@@ -48,7 +48,7 @@ from os.path import exists, join, dirname, realpath, basename#, splitext
 from shutil import move
 from argparse import ArgumentParser
 from multiprocessing import Process, Queue, cpu_count
-from itertools import permutations, combinations
+from itertools import permutations, combinations, product, combinations_with_replacement
 
 from lib import utils
 from lib.ClusterPair import ClusterPair, cluster
@@ -1100,62 +1100,55 @@ def main():
 
     # For efficiency, sequence-level comparisons are grouped together, so as
     # to use every loaded genome many times before unloading.
-    genomes_counter = 0 # to track progress, outer genomes loop only
-    total_genomes = len(genomes)
-    # FIXME: this code generates at least 2x more comparisons than needed.
-    # Problem 1: g1 and g2 formed 2x more genome pairs than needed. Fixed.
-    genome_keys = genomes.keys() # to simplify iteration without processing every genome pair twice
-    # FIXME: simplify code, use itertools.combinations_with_replacement(genomes.keys(), r=2)
-    for g1 in genome_keys:
+    combinations_counter = 0 # to track progress, outer genomes loop only
+    total_combinations = len(list(combinations_with_replacement(genomes.keys(), r = 2)))
+    prev_g1 = None # tracker of the previous g1 genome, to know when to unload it
+    for g1, g2 in combinations_with_replacement(genomes.keys(), r = 2):
+        combinations_counter += 1
+        print('%s / %s\t' % (combinations_counter, total_combinations), genomes[g1].id, genomes[g2].id)
+        if prev_g1 and g1 != prev_g1:
+            genomes[prev_g1].unload()
+            prev_g1 = g1
         genomes[g1].load()
-        genomes_counter += 1
-        print('%s / %s\t' % (genomes_counter, total_genomes), genomes[g1].id, end='')
-        for g2 in genome_keys[genome_keys.index(g1):]:
-            genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
-            print('\t', genomes[g2].id)
-            # iterate all possible cluster pairs between these 2 genomes;
-            # can also parallelize here
-            # Generate cluster pairs.
-#            print('Constructing orthology gene-based cluster links.')
-            # Problem 2: when g1 == g2, this causes multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc).
-            if g1 == g2:
-                # Generates only unique intra-species cluster-cluster pairs (combinations).
-                pairslist = [(cluster(g1, c1), cluster(g1, c2)) for c1, c2 in combinations(genomes[g1].clusters, r = 2)]
-            else:
-                # Pair each cluster from g1 with each cluster from g2 (product).
-                pairslist = [(cluster(g1, c1), cluster(g2, c2))
-                             for c1 in genomes[g1].clusters
-                             for c2 in genomes[g2].clusters]
-                #pairslist = [(cluster(g1, c1), cluster(g2, c2)) for c1, c2 in product(genomes[g1].clusters, genomes[g2].clusters)]
-            for cl1, cl2 in pairslist:
-                # Skip self-self clusters.
-                if cl1 == cl2:
-                    print(' ==================== BOOOOOOOOOOOOO ======================')
-                    continue
-                cp = ClusterPair(cl1, cl2)
-                print(cl1, cl2) # FIXME: debug only
-                # TODO: from here on this seems parallelizible.
-                # Calculate the number of orthologous links.
-                cp.assign_orthologous_link(mp, genomes, args)
-                if cp.link1 > 0 or cp.link2 > 0:
-                    # Calculate gene-level and clusterpair-average protein identities in clusters.
-                    cp.CDS_identities(genomes)
-                    if cp.avg_identity[0] > 0:
-                        logging.debug('Average identity of %s and %s is %s ',
-                                      cp.gc1, cp.gc2, cp.avg_identity)
-#                        print(cp.protein_identities)
-                        # TODO: Optional, depends on args: end-trim non-similar genes?
-                        if cp.avg_identity[0] > 2:
-                            # Calculate gene order and orientation (strandedness) preservation (for similar genes).
-                            cp.gene_order(genomes)
-                        # Calculate predicted domains order preservation within similar genes.
-                        #cp.domains(genomes)
-                    # Calculate cluster-level nucleotide identity.
-                    #cp.nucleotide_similarity(genomes)
-                    cluster_pairs.append(cp)
-            if g1 != g2:
-                genomes[g2].unload()
-        genomes[g1].unload()
+        genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
+        # iterate all possible cluster pairs between these 2 genomes;
+        # can also parallelize here
+        # Generate cluster pairs.
+        #print('Constructing orthology gene-based cluster links.')
+        # When g1 == g2, multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc) would happen with product.
+        if g1 == g2:
+            # Generate only unique intra-species cluster-cluster pairs (combinations).
+            pairslist = [(cluster(g1, c1), cluster(g1, c2))
+                         for c1, c2 in combinations(genomes[g1].clusters, r = 2)]
+        else:
+            # Pair each cluster from g1 with each cluster from g2 (product).
+            pairslist = [(cluster(g1, c1), cluster(g2, c2))
+                         for c1, c2 in product(genomes[g1].clusters,
+                                               genomes[g2].clusters)]
+        for cl1, cl2 in pairslist:
+            cp = ClusterPair(cl1, cl2)
+            #print(cl1, cl2)
+            # TODO: from here on this seems parallelizible.
+            # Calculate the number of orthologous links.
+            cp.assign_orthologous_link(mp, genomes, args)
+            if cp.link1 > 0 or cp.link2 > 0:
+                # Calculate gene-level and clusterpair-average protein identities in clusters.
+                cp.CDS_identities(genomes)
+                if cp.avg_identity[0] > 0:
+                    logging.debug('Average identity of %s and %s is %s ',
+                                  cp.gc1, cp.gc2, cp.avg_identity)
+                    #print(cp.protein_identities)
+                    # TODO: Optional, depends on args: end-trim non-similar genes?
+                    if cp.avg_identity[0] > 2:
+                        # Calculate gene order and orientation (strandedness) preservation (for similar genes).
+                        cp.gene_order(genomes)
+                    # Calculate predicted domains order preservation within similar genes.
+                    #cp.domains(genomes)
+                # Calculate cluster-level nucleotide identity.
+                #cp.nucleotide_similarity(genomes)
+                cluster_pairs.append(cp)
+        if g1 != g2:
+            genomes[g2].unload()
     print('Processed %s cluster pairs.' % len(cluster_pairs))
 
     return 0
