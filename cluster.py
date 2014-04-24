@@ -1100,21 +1100,40 @@ def main():
 
     # For efficiency, sequence-level comparisons are grouped together, so as
     # to use every loaded genome many times before unloading.
-    for g1 in genomes:
+    genomes_counter = 0 # to track progress, outer genomes loop only
+    total_genomes = len(genomes)
+    # FIXME: this code generates at least 2x more comparisons than needed.
+    # Problem 1: g1 and g2 formed 2x more genome pairs than needed. Fixed.
+    genome_keys = genomes.keys() # to simplify iteration without processing every genome pair twice
+    # FIXME: simplify code, use itertools.combinations_with_replacement(genomes.keys(), r=2)
+    for g1 in genome_keys:
         genomes[g1].load()
-        for g2 in genomes:
+        genomes_counter += 1
+        print('%s / %s\t' % (genomes_counter, total_genomes), genomes[g1].id, end='')
+        for g2 in genome_keys[genome_keys.index(g1):]:
             genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
+            print('\t', genomes[g2].id)
             # iterate all possible cluster pairs between these 2 genomes;
             # can also parallelize here
             # Generate cluster pairs.
 #            print('Constructing orthology gene-based cluster links.')
-            for cl1, cl2 in [(cluster(g1, c1), cluster(g2, c2))
-                           for c1 in genomes[g1].clusters
-                           for c2 in genomes[g2].clusters]:
+            # Problem 2: when g1 == g2, this causes multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc).
+            if g1 == g2:
+                # Generates only unique intra-species cluster-cluster pairs (combinations).
+                pairslist = [(cluster(g1, c1), cluster(g1, c2)) for c1, c2 in combinations(genomes[g1].clusters, r = 2)]
+            else:
+                # Pair each cluster from g1 with each cluster from g2 (product).
+                pairslist = [(cluster(g1, c1), cluster(g2, c2))
+                             for c1 in genomes[g1].clusters
+                             for c2 in genomes[g2].clusters]
+                #pairslist = [(cluster(g1, c1), cluster(g2, c2)) for c1, c2 in product(genomes[g1].clusters, genomes[g2].clusters)]
+            for cl1, cl2 in pairslist:
                 # Skip self-self clusters.
                 if cl1 == cl2:
+                    print(' ==================== BOOOOOOOOOOOOO ======================')
                     continue
                 cp = ClusterPair(cl1, cl2)
+                print(cl1, cl2) # FIXME: debug only
                 # TODO: from here on this seems parallelizible.
                 # Calculate the number of orthologous links.
                 cp.assign_orthologous_link(mp, genomes, args)

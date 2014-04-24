@@ -174,7 +174,6 @@ class ClusterPair(object):
         gene_pairs = []
         # Make /tmp file and open it for writing.
         with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
-            # FIXME: avoid comparing cl. 2 to 9, and then later 9 to 2, when genome is the same
             for gene1, gene2 in itertools.product(gl1, gl2):
                 #logging.debug('gene1, gene2: %s, %s', gene1, gene2)
                 seq1 = genomes[self.g1].get_protein(gene1.split(':')[0])
@@ -238,16 +237,6 @@ class ClusterPair(object):
         '''
         Are similar genes in the same order or not?
         '''
-        # FIXME: some inter-species cluster pairs are present more than once!!!!
-        # FIXME: ClusterPair is simply evaluated twice, first with GMON/6 as 1st cluster, then with KRI/9 as 1st.
-        #{Cluster(genome='GMON_MP13002', number=6): [10, 13, 14, 15], Cluster(genome='KRI_MP130_17', number=9): [9, 10, 7, 6]}
-        #S: -0.8
-        #P: -0.676123403783
-        #K: -0.666666666667
-        #{Cluster(genome='GMON_MP13002', number=6): [15, 14, 10, 13], Cluster(genome='KRI_MP130_17', number=9): [6, 7, 9, 10]}
-        #S: -0.8
-        #P: -0.676123403783
-        #K: -0.666666666667
         # For clusters 1 and 2, for genes which have identity pairs,
         # build a list of per-genome gene indexes (i.e. 0, 1, 2...)
         # (from lower to higher cluster coordinate).
@@ -264,14 +253,14 @@ class ClusterPair(object):
                 gene2 = GeneOrder(int(gene2_feature.location.start.position), gene2_feature.strand, gene2_name)
                 inds[self.gc2].append(genomes[self.g2].orderstrands[self.c2].index(gene2) + 1)
 #                print(genomes[self.g2].orderstrands[self.c2])
-        print(inds) # FIXME: debug only
+#        print(inds) # FIXME: debug only
         # spearman: monotonicity (same gene order, disregarding distances), less sensitive to outliers
         # pearson: linearity (same gene order AND similar distances); not really applicable: "a measure of the linear relationship between two continuous random variables"
         # kendall: unlike spearman and pearson, here each point contributes equally
         # magnitude: kendall < spearman
-        print('P:', stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
-        print('K:', stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
-        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+#        print('P:', stats.pearsonr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+#        print('K:', stats.kendalltau(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
+#        print('S:', stats.spearmanr(inds[self.gc1], inds[self.gc2])[0]) # FIXME: debug only
         # BioPython also has these stat routines:
 #        import numpy as np
 #        from Bio import Cluster
