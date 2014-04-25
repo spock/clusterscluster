@@ -600,10 +600,11 @@ def preprocess_input_files(inputs, args):
                         del new_id
         inputs[g.id] = g
 
-    workers = min(cpu_count(), len(inputs))
+    total_genomes = len(inputs)
+    workers = min(cpu_count(), total_genomes)
     qsize = 3 * workers
-    task_queue = Queue(maxsize = qsize)
-    done_queue = Queue(maxsize = qsize)
+    task_queue = Queue()
+    done_queue = Queue()
     # 1. Define workers.
     def geneparser(tasks, done, args):
         while True:
@@ -621,12 +622,13 @@ def preprocess_input_files(inputs, args):
             g.run_antismash(args.force, args.antismash_warning_shown,
                             args.no_extensions, cores = 1)
             # FIXME: cannot directly assign to args.antismash_warning_shown!!!
-            args.antismash_warning_shown = g.antismash_warning_shown
+            #args.antismash_warning_shown = g.antismash_warning_shown
             g.parse_gene_cluster_relations(args)
             # Do not process zero-cluster genomes.
             if g.num_clusters() == 0:
                 logging.info('%s (%s) has zero clusters, removing from further analysis',
                              g.species, g.id)
+                done.put(None)
                 continue
             g.as2faa(args.force)
             done.put(g)
@@ -647,25 +649,23 @@ def preprocess_input_files(inputs, args):
     for _ in range(workers):
         task_queue.put('STOP')
     del workers
-    # 5. Start collecting results, assume 1 task takes <= 5 seconds.
+    # 5. Start collecting results.
     # First, empty inputs.
     for k in list(inputs.iterkeys()):
         del inputs[k]
-    while True:
-        try:
-            g = done_queue.get(timeout = 5)
+    for _ in range(total_genomes):
+        g = done_queue.get()
+        if g != None:
             inputs[g.id] = g
-#             Populate all_clusters.
-#            for c in g.clusters:
-#                all_clusters.append(cluster(g.id, c))
-        except: # Queue.Empty for > 5 seconds
-            break
+        # Populate all_clusters.
+        #for c in g.clusters:
+        #    all_clusters.append(cluster(g.id, c))
     # 6. Wait for processes to finish, close queues.
     # FIXME: join() the processes hangs, fixed with timeout
     logging.debug("Joining processes.")
     for p in workers_list:
-        p.join(timeout = 5)
-    del p, workers_list
+        p.join(timeout = 20)
+    del p, workers_list, total_genomes
     task_queue.close()
     done_queue.close()
 
