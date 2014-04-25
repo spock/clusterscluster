@@ -1097,7 +1097,7 @@ def main():
     mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
     # Processed cluster pairs with at least 1 ortho-link.
-    cluster_pairs = []
+    #cluster_pairs = []
     cluster_pairs_counter = 0
 
     # Open the output CSV file for writing, prepare CSV writer.
@@ -1164,16 +1164,18 @@ def main():
                         cp.gene_order(genomes)
                     # Calculate predicted domains order preservation within similar genes.
                     #cp.domains(genomes)
-                # Calculate cluster-level nucleotide identity.
-                #cp.nucleotide_similarity(genomes)
-                #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
-                row = [int(cp.intra), genomes[g1].id, genomes[g2].id, genomes[g1].species,
-                       genomes[g2].species, cp.c1, cp.c2, genomes[g1].number2products[cp.c1],
-                       genomes[g2].number2products[cp.c2], cp.c1_genes, cp.c2_genes,
-                       genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
-                       int(cp.link1), int(cp.link2), cp.avg_identity[0],
-                       round(cp.avg_identity[1], 1), cp.pearson, cp.kendall, cp.spearman]
-                done.put(row)
+                # FIXME: indented 1 level for speedup (only save pairs with 1+ similar genes)
+                    # Calculate cluster-level nucleotide identity.
+                    #cp.nucleotide_similarity(genomes)
+                    #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
+                    row = [int(cp.intra), genomes[g1].id, genomes[g2].id, genomes[g1].species,
+                           genomes[g2].species, cp.c1, cp.c2, genomes[g1].number2products[cp.c1],
+                           genomes[g2].number2products[cp.c2], cp.c1_genes, cp.c2_genes,
+                           genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
+                           cp.link1, cp.link2, cp.avg_identity[0],
+                           round(cp.avg_identity[1], 1), cp.pearson, cp.kendall, cp.spearman]
+                    done.put(row)
+                done.put(None)
         # 2. Start workers.
         workers_list = []
         #logging.info('Starting %s cp_processors.', cpu_count())
@@ -1188,10 +1190,12 @@ def main():
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
             # Calculate the number of orthologous links.
-            cp.assign_orthologous_link(mp, genomes, args)
-            if cp.link1 > 0 or cp.link2 > 0:
-                submitted_tasks += 1
-                tasks.put(cp)
+            #cp.assign_orthologous_link(mp, genomes, args) # FIXME: disabled for speedup
+            #if cp.link1 > 0 or cp.link2 > 0:
+                #submitted_tasks += 1
+                #tasks.put(cp)
+            submitted_tasks += 1
+            tasks.put(cp)
         # 4. Add STOP messages.
         #logging.debug('Adding %s STOP messages to tasks.', cpu_count())
         for _ in range(cpu_count()):
@@ -1199,8 +1203,8 @@ def main():
         # 5. Collect results and write them to file.
         for _ in range(submitted_tasks):
             row = done.get()
-#            if row == None: # no result for this cluster pair
-#                continue
+            if row == None: # no result for this cluster pair
+                continue
             cluster_pairs_counter += 1
             writer.writerow(row)
         # 6. Wait for processes to finish, close queues.

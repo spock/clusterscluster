@@ -98,7 +98,7 @@ class ClusterPair(object):
         return bioclusters
 
 
-    def calculate_links(self, which, mp, genomes):
+    def calculate_links(self, mp, genomes):
         '''
         Count the number of unique orthologoues gene pairs ("links") between
         clusters in this pair.
@@ -107,33 +107,30 @@ class ClusterPair(object):
         'which': which genome/cluster is the basis for calculation;
                  result will change depending on this!
         '''
-        links = 0
-        if which == 1:
-            logging.debug("Looking at %s genes in cluster %s (2nd is %s)...",
-                          len(genomes[self.g1].cluster2genes[self.c1]),
-                          self.c1, self.gc2)
-            for gene in genomes[self.g1].cluster2genes[self.c1]:
-                # 'gene' is a 'locus_tag:genome_id' string.
-                if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
-                    links += 1
-        if which == 2:
-            logging.debug("Looking at %s genes in cluster %s (1st is %s)...",
-                          len(genomes[self.g2].cluster2genes[self.c2]),
-                          self.c2, self.gc1)
-            for gene in genomes[self.g2].cluster2genes[self.c2]:
-                if self.gc1 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
-                    links += 1
-        return links
+        links1 = 0
+        links2 = 0
+        logging.debug("Looking at %s genes in cluster %s (2nd is %s)...",
+                      len(genomes[self.g1].cluster2genes[self.c1]),
+                      self.c1, self.gc2)
+        for gene in genomes[self.g1].cluster2genes[self.c1]: # FIXME: too slow
+            # 'gene' is a 'locus_tag:genome_id' string.
+            if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
+                links1 += 1
+        logging.debug("Looking at %s genes in cluster %s (1st is %s)...",
+                      len(genomes[self.g2].cluster2genes[self.c2]),
+                      self.c2, self.gc1)
+        for gene in genomes[self.g2].cluster2genes[self.c2]: # FIXME: too slow
+            if self.gc1 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
+                links2 += 1
+        return links1, links2
 
 
     def assign_orthologous_link(self, mp, genomes, args):
         '''
         Assign orthologous link to this cluster pair.
         '''
-        link1 = float(min(self.calculate_links(1, mp, genomes),
-                           self.num_c1_genes(genomes)))
-        link2 = float(min(self.calculate_links(2, mp, genomes),
-                           self.num_c2_genes(genomes)))
+        link1, link2 = min(self.calculate_links(mp, genomes),
+                           self.num_c1_genes(genomes))
         logging.debug('\tlink1= %s and link2= %s for %s and %s, %s/%s genes',
                       link1, link2, self.gc1, self.gc2, self.num_c1_genes(genomes),
                       self.num_c2_genes(genomes))
