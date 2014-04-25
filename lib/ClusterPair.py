@@ -8,7 +8,7 @@ from utils import usearch, SymKeyDict
 from lib.Genome import GeneOrder, FeatureTuple
 
 
-cluster = namedtuple('Cluster', ['genome', 'number'])
+Cluster = namedtuple('Cluster', ['genome', 'number'])
 
 
 class ClusterPair(object):
@@ -92,7 +92,7 @@ class ClusterPair(object):
                 xeno_gene2clusters = genomes[xeno_species].gene2clusters
                 if xeno_gene in xeno_gene2clusters:
                     for clnum in xeno_gene2clusters[xeno_gene]:
-                        xeno_cluster = cluster(xeno_species, clnum)
+                        xeno_cluster = Cluster(xeno_species, clnum)
                         bioclusters.append(xeno_cluster)
 #                        logging.debug('\txeno_gene %s belongs to %s', xeno_gene, xeno_cluster)
         return bioclusters
