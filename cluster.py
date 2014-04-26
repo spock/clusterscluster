@@ -571,12 +571,9 @@ def process(all_clusters, inputs, paranoid, args):
 
 def preprocess_input_files(inputs, args):
     '''
-    inputs: dictionary to populate with Genomes;
-    args.paths: list of genbank files to process;
-    return all_clusters, the list of (genome_id, cluster_number) named tuples.
+    inputs: dict[genome.id] = Genome, is populated by this function.
+    args.paths: list of genbank files to process.
     '''
-#    all_clusters = []
-
     # Process genome IDs.
     for infile in args.paths:
         g = Genome(infile, args.project)
@@ -602,10 +599,9 @@ def preprocess_input_files(inputs, args):
 
     total_genomes = len(inputs)
     workers = min(cpu_count(), total_genomes)
-    qsize = 3 * workers
     task_queue = Queue()
     done_queue = Queue()
-    # 1. Define workers.
+    # 1. Define worker.
     def geneparser(tasks, done, args):
         while True:
             try:
@@ -621,7 +617,7 @@ def preprocess_input_files(inputs, args):
             g.gb2fna()
             g.run_antismash(args.force, args.antismash_warning_shown,
                             args.no_extensions, cores = 1)
-            # FIXME: cannot directly assign to args.antismash_warning_shown!!!
+            # FIXME: cannot directly assign to args.antismash_warning_shown!!! shared object!!!
             #args.antismash_warning_shown = g.antismash_warning_shown
             g.parse_gene_cluster_relations(args)
             # Do not process zero-cluster genomes.
@@ -650,7 +646,7 @@ def preprocess_input_files(inputs, args):
         task_queue.put('STOP')
     del workers
     # 5. Start collecting results.
-    # First, empty inputs.
+    # First, empty 'inputs'; this preserves reference to the external 'inputs'.
     for k in list(inputs.iterkeys()):
         del inputs[k]
     for _ in range(total_genomes):
@@ -661,10 +657,9 @@ def preprocess_input_files(inputs, args):
         #for c in g.clusters:
         #    all_clusters.append(cluster(g.id, c))
     # 6. Wait for processes to finish, close queues.
-    # FIXME: join() the processes hangs, fixed with timeout
     logging.debug("Joining processes.")
     for p in workers_list:
-        p.join(timeout = 20)
+        p.join()
     del p, workers_list, total_genomes
     task_queue.close()
     done_queue.close()
@@ -1007,6 +1002,7 @@ def main():
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
+    parser.add_argument("--skip-orthology", action="store_true", default=False, help="do not run any orthology analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
     parser.add_argument("--scale", dest="scale", action="store_true", default=False, help="scale link weight down by a factor of min(size1, size2)/max(size1, size2) [default: %(default)s]")
     parser.add_argument("--use-sizes", dest="use_sizes", action="store_true", default=False, help="each cluster's contribution to link weight is scaled by relative cluster sizes; can be combined with --strict [default: %(default)s]")
@@ -1060,6 +1056,7 @@ def main():
         sys.exit(4)
     logging.info("Will process %s input files.", len(args.paths))
 
+    # Useful for generating inparanoid commands to run on different computers.
     if args.emulate_inparanoid:
         print('Used arguments and options:', file = sys.stderr)
         pprint(vars(args), stream = sys.stderr)
@@ -1084,17 +1081,19 @@ def main():
     preprocess_input_files(genomes, args)
     if len(args.paths) == 1: # single input - exit
         sys.exit(3)
-    inparanoidir, faafiles = prepare_inparanoid(genomes, args)
-    run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
+    if not args.skip_orthology:
+        inparanoidir, faafiles = prepare_inparanoid(genomes, args)
+        run_inparanoid(inparanoidir, faafiles, args.emulate_inparanoid)
     if args.emulate_inparanoid:
         logging.info('Exiting prematurely because of --emulate-inparanoid.')
         return 0
 
-    result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
-    del inparanoidir, faafiles
+    if not args.skip_orthology:
+        result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
+        del inparanoidir, faafiles
 
-    # Parse quickparanoid results.
-    mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
+        # Parse quickparanoid results.
+        mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
     # Processed cluster pairs with at least 1 ortho-link.
     #cluster_pairs = []
@@ -1147,10 +1146,10 @@ def main():
                 try:
                     cp = tasks.get()
                 except:
-                    #logging.warning('tasks queue empty in cp_processor?')
+                    logging.warning('tasks queue empty in cp_processor?')
                     raise
                 if cp == 'STOP':
-                    #logging.debug('STOP found, exiting.')
+                    logging.debug('STOP found, exiting.')
                     break
                 # Calculate gene-level and clusterpair-average protein identities in clusters.
                 cp.CDS_identities(genomes)
@@ -1164,7 +1163,6 @@ def main():
                         cp.gene_order(genomes)
                     # Calculate predicted domains order preservation within similar genes.
                     #cp.domains(genomes)
-                # FIXME: indented 1 level for speedup (only save pairs with 1+ similar genes)
                     # Calculate cluster-level nucleotide identity.
                     #cp.nucleotide_similarity(genomes)
                     #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
@@ -1178,26 +1176,29 @@ def main():
                 done.put(None)
         # 2. Start workers.
         workers_list = []
-        #logging.info('Starting %s cp_processors.', cpu_count())
+        logging.info('Starting %s cp_processors.', cpu_count())
         for _ in range(cpu_count()):
             p = Process(target=cp_processor, args=(tasks, done, genomes))
             p.start()
             workers_list.append(p)
         del p
         # 3. Populate tasks.
-        #logging.debug('Populating tasks queue.')
+        logging.debug('Populating tasks queue.')
         submitted_tasks = 0
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
-            # Calculate the number of orthologous links.
-            #cp.assign_orthologous_link(mp, genomes, args) # FIXME: disabled for speedup
-            #if cp.link1 > 0 or cp.link2 > 0:
-                #submitted_tasks += 1
-                #tasks.put(cp)
-            submitted_tasks += 1
-            tasks.put(cp)
+            if not args.skip_orthology:
+                # Calculate the number of orthologous links.
+                cp.assign_orthologous_link(mp, genomes, args)
+                if cp.link1 > 0 or cp.link2 > 0:
+                    submitted_tasks += 1
+                    tasks.put(cp)
+            else:
+                # Analyze all pairs of clusters; actually faster than calculating ortho-links.
+                submitted_tasks += 1
+                tasks.put(cp)
         # 4. Add STOP messages.
-        #logging.debug('Adding %s STOP messages to tasks.', cpu_count())
+        logging.debug('Adding %s STOP messages to tasks.', cpu_count())
         for _ in range(cpu_count()):
             tasks.put('STOP')
         # 5. Collect results and write them to file.
@@ -1208,7 +1209,7 @@ def main():
             cluster_pairs_counter += 1
             writer.writerow(row)
         # 6. Wait for processes to finish, close queues.
-        #logging.debug('Joining processes.')
+        logging.debug('Joining processes.')
         for p in workers_list:
             p.join()
         del p, workers_list, submitted_tasks
@@ -1218,7 +1219,6 @@ def main():
         if g1 != g2:
             genomes[g2].unload()
 
-    #print('Processed %s cluster pairs.' % len(cluster_pairs))
     print('Processed %s cluster pairs.' % cluster_pairs_counter)
     csvout.close()
 
