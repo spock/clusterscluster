@@ -1176,14 +1176,14 @@ def main():
                 done.put(None)
         # 2. Start workers.
         workers_list = []
-        logging.info('Starting %s cp_processors.', cpu_count())
+        #logging.info('Starting %s cp_processors.', cpu_count())
         for _ in range(cpu_count()):
             p = Process(target=cp_processor, args=(tasks, done, genomes))
             p.start()
             workers_list.append(p)
         del p
         # 3. Populate tasks.
-        logging.debug('Populating tasks queue.')
+        #logging.debug('Populating tasks queue.')
         submitted_tasks = 0
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
@@ -1198,7 +1198,7 @@ def main():
                 submitted_tasks += 1
                 tasks.put(cp)
         # 4. Add STOP messages.
-        logging.debug('Adding %s STOP messages to tasks.', cpu_count())
+        #logging.debug('Adding %s STOP messages to tasks.', cpu_count())
         for _ in range(cpu_count()):
             tasks.put('STOP')
         # 5. Collect results and write them to file.
@@ -1209,7 +1209,7 @@ def main():
             cluster_pairs_counter += 1
             writer.writerow(row)
         # 6. Wait for processes to finish, close queues.
-        logging.debug('Joining processes.')
+        #logging.debug('Joining processes.')
         for p in workers_list:
             p.join()
         del p, workers_list, submitted_tasks
