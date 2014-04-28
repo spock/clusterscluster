@@ -1171,7 +1171,8 @@ def main():
                            genomes[g2].number2products[cp.c2], cp.num_c1_genes(), cp.num_c2_genes(),
                            genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
                            cp.link1, cp.link2, cp.avg_identity[0],
-                           round(cp.avg_identity[1], 1), cp.pearson, cp.kendall, cp.spearman]
+                           round(cp.avg_identity[1], 1), round(cp.pearson, 2),
+                           round(cp.kendall, 2), round(cp.spearman, 2)]
                     done.put(row)
                 done.put(None)
         # 2. Start workers.
