@@ -940,8 +940,9 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     with open(configfile, 'w') as conf_handle:
         conf_handle.write("\n".join(faafiles))
 
+    # chdir() to where quickparanoid will be run from.
     # Alternative path finding method: dirname(sys.argv[0])
-    quickparanoid = join(dirname(realpath(__file__)), 'quickparanoid')
+    quickparanoid = realpath(join(dirname(realpath(__file__)), 'quickparanoid'))
     curr_path = getcwd()
     logging.debug("Remembering current directory %s, changing to %s.",
                   curr_path, quickparanoid)
@@ -951,9 +952,10 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     qp = ['./qp', inparanoidir + os.sep, configfile, project]
     logging.info('Running quickparanoid analysis: %s', ' '.join(qp))
     out, err, retcode = utils.execute(qp)
-    if retcode != 0:
-        logging.debug('quickparanoid returned %d: %r while analyzing %r in %r',
+    if retcode != 0 or not exists(join(quickparanoid, project)):
+        logging.error('quickparanoid returned %d: %r while analyzing %r in %r',
                       retcode, err, configfile, project)
+        logging.error('Full output:\n%s\n', out)
     del out, err, retcode
 
     # Move generated 'project' and 'projects' executables to the {project} directory.
