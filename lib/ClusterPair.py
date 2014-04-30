@@ -129,8 +129,10 @@ class ClusterPair(object):
         '''
         Assign orthologous link to this cluster pair.
         '''
-        link1, link2 = min(self.calculate_links(mp, genomes),
-                           self.num_c1_genes(genomes))
+        link1, link2 = self.calculate_links(mp, genomes)
+        # Make sure the number of links never exceeds the number of genes.
+        link1 = min(link1, self.num_c1_genes(genomes))
+        link2 = min(link2, self.num_c2_genes(genomes))
         logging.debug('\tlink1= %s and link2= %s for %s and %s, %s/%s genes',
                       link1, link2, self.gc1, self.gc2, self.num_c1_genes(genomes),
                       self.num_c2_genes(genomes))
