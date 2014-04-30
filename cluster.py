@@ -1169,13 +1169,16 @@ def main():
                     # Calculate cluster-level nucleotide identity.
                     #cp.nucleotide_similarity(genomes)
                     #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
-                    row = [int(cp.intra), genomes[g1].id, genomes[g2].id, genomes[g1].species,
-                           genomes[g2].species, cp.c1, cp.c2, genomes[g1].number2products[cp.c1],
-                           genomes[g2].number2products[cp.c2], cp.num_c1_genes(), cp.num_c2_genes(),
-                           genomes[g1].clustersizes[cp.c1], genomes[g2].clustersizes[cp.c2],
-                           cp.link1, cp.link2, cp.avg_identity[0],
-                           round(cp.avg_identity[1], 1), round(cp.pearson, 2),
-                           round(cp.kendall, 2), round(cp.spearman, 2)]
+                    row = [int(cp.intra), genomes[g1].id, genomes[g2].id,
+                           genomes[g1].species, genomes[g2].species, cp.c1, cp.c2,
+                           genomes[g1].number2products[cp.c1],
+                           genomes[g2].number2products[cp.c2],
+                           cp.num_c1_genes(genomes), cp.num_c2_genes(genomes),
+                           genomes[g1].clustersizes[cp.c1],
+                           genomes[g2].clustersizes[cp.c2], cp.link1, cp.link2,
+                           cp.avg_identity[0], round(cp.avg_identity[1], 1),
+                           round(cp.pearson, 2), round(cp.kendall, 2),
+                           round(cp.spearman, 2)]
                     done.put(row)
                 done.put(None)
         # 2. Start workers.
