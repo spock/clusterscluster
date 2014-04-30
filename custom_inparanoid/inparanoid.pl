@@ -314,19 +314,19 @@ if ($run_blast && !(-e $blast_outputAA && -e $blast_outputAB && -e $blast_output
         print "re-using BLASTdb for $fasta_seq_fileA\n";
     }
     else {
-        system ("$formatdb -i $fasta_seq_fileA -l /dev/stdout");
+        system ("$formatdb -i $fasta_seq_fileA");
     }
     if (@ARGV >= 2 && -e "$fasta_seq_fileB.phr" && -e "$fasta_seq_fileB.pin" && -e "$fasta_seq_fileB.psq") {
         print "re-using BLASTdb for $fasta_seq_fileB\n";
     }
     else {
-        system ("$formatdb -i $fasta_seq_fileB -l /dev/stdout");
+        system ("$formatdb -i $fasta_seq_fileB");
     }
     if ($use_outgroup && -e "$fasta_seq_fileC.phr" && -e "$fasta_seq_fileC.pin" && -e "$fasta_seq_fileC.psq") {
         print "re-using BLASTdb for $fasta_seq_fileC\n";
     }
     else {
-        system ("$formatdb -i $fasta_seq_fileC -l /dev/stdout");
+        system ("$formatdb -i $fasta_seq_fileC");
     }
     print STDERR "Done formatting\nStarting BLAST searches...\n";
 
@@ -1838,7 +1838,7 @@ sub do_blast_2pass {
 	# This efficiently removes low complexity matches but truncates alignments,
 	# making a second pass necessary.
 	print STDERR "\nStarting first BLAST pass for $Fld[0] - $Fld[1] on ";
-	system("date");
+	print STDERR system("date");
 	my $command = "$blastall -C3 -F\"m S\" -i $Fld[0] -d $Fld[1] -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff|";
 	print STDERR "command is: $command\n";
 	open FHR, $command;
@@ -1848,14 +1848,12 @@ sub do_blast_2pass {
 		$aLine = $_;
 		chomp ($aLine);
 		@words = split (/\s+/, $aLine);
-
 		if (exists ($theHits {$words [0]})) {
 			$theHits {$words [0]} = $theHits {$words [0]}." ".$words [1];
 		}
 		else {
 			$theHits {$words [0]} = $words [1];
 		}
-
 	}
 	close (FHR);
 
@@ -1891,6 +1889,8 @@ sub do_blast_2pass {
 		# open my $fh => "| cmd -option" or die $!; print $fh $str; close $fh or die $!;
 		system ("$blastall -C0 -FF -i $tmpi -d $tmpd -p blastp -v $Fld[3] -b $Fld[3] -M $matrix -z 5000000 -m7 | $blastParser $score_cutoff >> $Fld[4]");
 	}
+	# even if nothing was found - make sure the file exists
+	system ("touch $Fld[4]");
 
 	unlink "$tmpi", "$tmpd", "formatdb.log", "$tmpd.phr", "$tmpd.pin", "$tmpd.psq";
 }

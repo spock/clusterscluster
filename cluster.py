@@ -956,6 +956,7 @@ def run_quickparanoid(inparanoidir, faafiles, project):
         logging.error('quickparanoid returned %d: %r while analyzing %r in %r',
                       retcode, err, configfile, project)
         logging.error('Full output:\n%s\n', out)
+        raise Exception('QuickParanoidError')
     del out, err, retcode
 
     # Move generated 'project' and 'projects' executables to the {project} directory.
