@@ -162,7 +162,7 @@ class ClusterPair(object):
         self.link2 = link2
 
 
-    def CDS_identities(self, genomes):
+    def CDS_identities(self, genomes, cutoff, fulldp):
         '''
         Calculate per-gene-pair protein identity, and also average
         protein identity for cluster pair. Calculate average protein identity.
@@ -187,7 +187,7 @@ class ClusterPair(object):
             # seqfile is open for writing when usearch runs, so better at least flush it
             seqfile.flush()
             # Run usearch, once. TODO: do FULL later for chosen genepairs?
-            results = usearch(seqfile.name, full = False)
+            results = usearch(seqfile.name, cutoff, fulldp)
             if results == '':
                 # empty result: nothing above the cut-off, no similar gene pairs
                 self.avg_identity = (0, 0.0)

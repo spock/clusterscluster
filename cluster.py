@@ -1004,6 +1004,8 @@ def main():
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
+    parser.add_argument("--fulldp", dest="fulldp", action="store_true", default=False, help="use full dynamic programming solution in usearch alignment (much slower!) [default: %(default)s]")
+    parser.add_argument("--cutoff", dest="cutoff", type = float, default = 0.4, help="protein identity cut-off when aligning with usearch [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--skip-orthology", action="store_true", default=False, help="do not run any orthology analysis [default: %(default)s]")
     parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
@@ -1155,7 +1157,7 @@ def main():
                     logging.debug('STOP found, exiting.')
                     break
                 # Calculate gene-level and clusterpair-average protein identities in clusters.
-                cp.CDS_identities(genomes)
+                cp.CDS_identities(genomes, args.cutoff, args.fulldp)
                 if cp.avg_identity[0] > 0:
                     #logging.debug('Average identity of %s and %s is %s ',
                     #              cp.gc1, cp.gc2, cp.avg_identity)
