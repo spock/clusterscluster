@@ -1105,7 +1105,17 @@ def main():
     cluster_pairs_counter = 0
 
     # Open the output CSV file for writing, prepare CSV writer.
-    csvout = open(join(args.project, 'final_results.csv'), 'w')
+    res_fname = 'results'
+    if args.fulldp:
+        res_fname += '_fulldp'
+    if args.skip_orthology:
+        res_fname += '_skip_orthology'
+    if args.trim:
+        res_fname += '_trim'
+    if args.no_extensions:
+        res_fname += '_no_extensions'
+    res_fname += '.csv'
+    csvout = open(join(args.project, res_fname), 'w')
     writer = csv.writer(csvout, delimiter = '\t', quoting = csv.QUOTE_NONE)
     # Output header.
     header = ['is_intra', 'genome1_ID', 'genome2_ID', 'species1', 'species2',
