@@ -156,12 +156,15 @@ $outputfile = "Output." . $ARGV[0] . "-" . $ARGV[1];
 $htmlfile = "orthologs." . $ARGV[0] . "-" . $ARGV[1] . ".html";
 $filename = "table." . $ARGV[0] . "-" . $ARGV[1];
 $filename2 = "sqltable." . $ARGV[0] . "-" . $ARGV[1];
-if (-e $outputfile && -e $htmlfile && -e $filename && -e $filename2) {
-    print "All 4 expected output files exist, skipping the entire analysis:\n";
-    print "\t$outputfile\n";
-    print "\t$htmlfile\n";
-    print "\t$filename\n";
-    print "\t$filename2\n";
+if (-e $filename2) {
+    print "Primary output file $filename2 exists, skipping the analysis.\n";
+    if (-e $outputfile && -e $htmlfile && -e $filename && -e $filename2) {
+        print "All 4 expected output files exist:\n";
+        print "\t$outputfile\n";
+        print "\t$htmlfile\n";
+        print "\t$filename\n";
+        print "\t$filename2\n";
+    }
     exit;
 }
 
