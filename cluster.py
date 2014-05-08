@@ -1100,8 +1100,9 @@ def main():
         # Parse quickparanoid results.
         mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
-    # Processed cluster pairs with at least 1 ortho-link.
-    #cluster_pairs = []
+    # Counter of submitted cluster pairs.
+    submitted_tasks = 0
+    # Counter of processed cluster pairs.
     cluster_pairs_counter = 0
 
     # Open the output CSV file for writing, prepare CSV writer.
@@ -1130,6 +1131,68 @@ def main():
     combinations_counter = 0 # to track progress, outer genomes loop only
     total_combinations = len(list(combinations_with_replacement(genomes.keys(), r = 2)))
     prev_g1 = None # tracker of the previous g1 genome, to know when to unload it
+
+    # Preparing for parallel ClusterPair processing.
+    # 0. Define queues.
+    tasks = Queue() # maxsize = cpu_count() * 2
+    done  = Queue()
+    # 1. Define worker.
+    def cp_processor(tasks, done, mp, genomes, args):
+        '''Fully process single ClusterPair from 'tasks', put CSV row into 'done'.'''
+        while True:
+            try:
+                task = tasks.get()
+            except:
+                logging.exception('tasks queue empty in cp_processor?')
+                raise
+            if task == 'STOP':
+#                logging.debug('STOP found, exiting.')
+                break
+            cl1, cl2, g1, g2 = task
+            cp = ClusterPair(cl1, cl2)
+            # FIXME: add back support for args.skip_orthology
+            # Calculate the number of orthologous links. mp, genomes, args are all taken from context.
+            cp.assign_orthologous_link(mp, genomes, args)
+            if cp.link1 > 0 or cp.link2 > 0:
+                # Calculate gene-level and clusterpair-average protein identities in clusters.
+                cp.CDS_identities(g1, g2, args.cutoff, args.fulldp)
+                if cp.avg_identity[0] > 0:
+#                    logging.debug('Average identity of %s and %s is %s ',
+#                                  cp.gc1, cp.gc2, cp.avg_identity)
+                    #print(cp.protein_identities)
+                    # TODO: Optional, depends on args: end-trim non-similar genes?
+                    if cp.avg_identity[0] > 2:
+                        # Calculate gene order and orientation (strandedness) preservation (for similar genes).
+                        cp.gene_order(g1, g2)
+                    # Calculate predicted domains order preservation within similar genes.
+                    #cp.domains(genomes)
+                    # Calculate cluster-level nucleotide identity.
+                    #cp.nucleotide_similarity(genomes)
+                    #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
+                    row = [int(cp.intra), g1.id, g2.id,
+                           g1.species, g2.species, cp.c1, cp.c2,
+                           g1.number2products[cp.c1],
+                           g2.number2products[cp.c2],
+                           cp.num_c1_genes(g1), cp.num_c2_genes(g2),
+                           g1.clustersizes[cp.c1],
+                           g2.clustersizes[cp.c2], cp.link1, cp.link2,
+                           cp.avg_identity[0], round(cp.avg_identity[1], 1),
+                           round(cp.pearson, 2), round(cp.kendall, 2),
+                           round(cp.spearman, 2)]
+                    done.put(row)
+#                    logging.debug('row')
+                    continue
+            done.put(None)
+#            logging.debug('None')
+    # 2. Start workers.
+    workers_list = []
+    logging.debug('Starting %s cp_processors.', cpu_count())
+    for _ in range(cpu_count()):
+        p = Process(target=cp_processor, args=(tasks, done, mp, genomes, args))
+        p.start()
+        workers_list.append(p)
+    del p
+
     for g1, g2 in combinations_with_replacement(genomes.keys(), r = 2):
         combinations_counter += 1
         print('%s / %s\t' % (combinations_counter, total_combinations), genomes[g1].id, genomes[g2].id)
@@ -1138,107 +1201,59 @@ def main():
             prev_g1 = g1
         genomes[g1].load()
         genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
-        # TODO: can start parallelizing from up here.
+        genome1 = genomes[g1]
+        genome2 = genomes[g2]
         # Iterate all possible cluster pairs between these 2 genomes, generate cluster pairs.
-        #print('Constructing orthology gene-based cluster links.')
         # When g1 == g2, multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc) would happen with 'product'.
         if g1 == g2:
             # Generate only unique intra-species cluster-cluster pairs (combinations).
             pairslist = [(Cluster(g1, c1), Cluster(g1, c2))
-                         for c1, c2 in combinations(genomes[g1].clusters, r = 2)]
+                         for c1, c2 in combinations(genome1.clusters, r = 2)]
         else:
             # Pair each cluster from g1 with each cluster from g2 (product).
             pairslist = [(Cluster(g1, c1), Cluster(g2, c2))
-                         for c1, c2 in product(genomes[g1].clusters,
-                                               genomes[g2].clusters)]
-        # 0. Define queues.
-        tasks = Queue()
-        done  = Queue()
-        # 1. Define worker.
-        def cp_processor(tasks, done, genomes):
-            '''Fully process single ClusterPair from 'tasks', put CSV row into 'done'.'''
-            while True:
-                try:
-                    cp = tasks.get()
-                except:
-                    logging.warning('tasks queue empty in cp_processor?')
-                    raise
-                if cp == 'STOP':
-                    logging.debug('STOP found, exiting.')
-                    break
-                # Calculate gene-level and clusterpair-average protein identities in clusters.
-                cp.CDS_identities(genomes, args.cutoff, args.fulldp)
-                if cp.avg_identity[0] > 0:
-                    #logging.debug('Average identity of %s and %s is %s ',
-                    #              cp.gc1, cp.gc2, cp.avg_identity)
-                    #print(cp.protein_identities)
-                    # TODO: Optional, depends on args: end-trim non-similar genes?
-                    if cp.avg_identity[0] > 2:
-                        # Calculate gene order and orientation (strandedness) preservation (for similar genes).
-                        cp.gene_order(genomes)
-                    # Calculate predicted domains order preservation within similar genes.
-                    #cp.domains(genomes)
-                    # Calculate cluster-level nucleotide identity.
-                    #cp.nucleotide_similarity(genomes)
-                    #cluster_pairs.append(cp) # may not need to collect all these cluster pairs, simply dump them and forget
-                    row = [int(cp.intra), genomes[g1].id, genomes[g2].id,
-                           genomes[g1].species, genomes[g2].species, cp.c1, cp.c2,
-                           genomes[g1].number2products[cp.c1],
-                           genomes[g2].number2products[cp.c2],
-                           cp.num_c1_genes(genomes), cp.num_c2_genes(genomes),
-                           genomes[g1].clustersizes[cp.c1],
-                           genomes[g2].clustersizes[cp.c2], cp.link1, cp.link2,
-                           cp.avg_identity[0], round(cp.avg_identity[1], 1),
-                           round(cp.pearson, 2), round(cp.kendall, 2),
-                           round(cp.spearman, 2)]
-                    done.put(row)
-                done.put(None)
-        # 2. Start workers.
-        workers_list = []
-        #logging.info('Starting %s cp_processors.', cpu_count())
-        for _ in range(cpu_count()):
-            p = Process(target=cp_processor, args=(tasks, done, genomes))
-            p.start()
-            workers_list.append(p)
-        del p
+                         for c1, c2 in product(genome1.clusters,
+                                               genome2.clusters)]
         # 3. Populate tasks.
-        #logging.debug('Populating tasks queue.')
-        submitted_tasks = 0
+#        logging.debug('Populating tasks queue.')
+        # Genome-pair specific counter of submitted tasks.
+        local_submitted = 0
         for cl1, cl2 in pairslist:
-            cp = ClusterPair(cl1, cl2)
-            if not args.skip_orthology:
-                # Calculate the number of orthologous links.
-                cp.assign_orthologous_link(mp, genomes, args)
-                if cp.link1 > 0 or cp.link2 > 0:
-                    submitted_tasks += 1
-                    tasks.put(cp)
-            else:
-                # Analyze all pairs of clusters; actually faster than calculating ortho-links.
-                submitted_tasks += 1
-                tasks.put(cp)
-        # 4. Add STOP messages.
-        #logging.debug('Adding %s STOP messages to tasks.', cpu_count())
-        for _ in range(cpu_count()):
-            tasks.put('STOP')
-        # 5. Collect results and write them to file.
-        for _ in range(submitted_tasks):
+            local_submitted += 1
+            # Have to pass entire genomes dict, as cp_processor is defined before we .load() any genomes.
+            tasks.put((cl1, cl2, genome1, genome2))
+#            logging.debug('Local-submitted %s.', local_submitted)
+        submitted_tasks += local_submitted
+        # 4. Collect results and write them to file.
+#        logging.debug('Collecting results.')
+        for _ in range(local_submitted):
             row = done.get()
+#            logging.debug('Collected task %s of %s local.', _ + 1, local_submitted)
             if row == None: # no result for this cluster pair
                 continue
             cluster_pairs_counter += 1
             writer.writerow(row)
-        # 6. Wait for processes to finish, close queues.
-        #logging.debug('Joining processes.')
-        for p in workers_list:
-            p.join()
-        del p, workers_list, submitted_tasks
-        tasks.close()
-        done.close()
+#        logging.debug('Done collecting results.')
 
         if g1 != g2:
             genomes[g2].unload()
+        #del genome1, genome2
 
-    print('Processed %s cluster pairs.' % cluster_pairs_counter)
+    # 5. Add STOP messages.
+    logging.debug('Adding %s STOP messages to tasks.', cpu_count())
+    for _ in range(cpu_count()):
+        tasks.put('STOP')
+    # 6. Wait for processes to finish, close queues.
+    logging.debug('Joining processes.')
+    for p in workers_list:
+        p.join(timeout = 10)
+    del p, workers_list
+    tasks.close()
+    done.close()
+
+    print('Processed %s of %s cluster pairs.' % (cluster_pairs_counter,
+                                                 submitted_tasks))
+    del submitted_tasks, cluster_pairs_counter
     csvout.close()
 
     return 0

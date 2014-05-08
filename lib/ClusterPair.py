@@ -56,17 +56,17 @@ class ClusterPair(object):
         self.spearman = 0.0
 
 
-    def num_c1_genes(self, genomes):
-        '''Return the number of genes in cluster c1.'''
+    def num_c1_genes(self, genome1):
+        '''Return the number of genes in cluster c1. genome1 = genomes[g1].'''
         if self.c1_genes == 0:
-            self.c1_genes = len(genomes[self.g1].cluster2genes[self.c1])
+            self.c1_genes = len(genome1.cluster2genes[self.c1])
         return self.c1_genes
 
 
-    def num_c2_genes(self, genomes):
-        '''Return the number of genes in cluster c2.'''
+    def num_c2_genes(self, genome2):
+        '''Return the number of genes in cluster c2. genome2 = genomes[g2].'''
         if self.c2_genes == 0:
-            self.c2_genes = len(genomes[self.g2].cluster2genes[self.c2])
+            self.c2_genes = len(genome2.cluster2genes[self.c2])
         return self.c2_genes
 
 
@@ -129,59 +129,62 @@ class ClusterPair(object):
         '''
         Assign orthologous link to this cluster pair.
         '''
+        # TODO: cleanup, can replace num_cx_genes(genomes[self]) with a variable
         link1, link2 = self.calculate_links(mp, genomes)
         # Make sure the number of links never exceeds the number of genes.
-        link1 = min(link1, self.num_c1_genes(genomes))
-        link2 = min(link2, self.num_c2_genes(genomes))
+        link1 = min(link1, self.num_c1_genes(genomes[self.g1]))
+        link2 = min(link2, self.num_c2_genes(genomes[self.g2]))
         logging.debug('\tlink1= %s and link2= %s for %s and %s, %s/%s genes',
-                      link1, link2, self.gc1, self.gc2, self.num_c1_genes(genomes),
-                      self.num_c2_genes(genomes))
+                      link1, link2, self.gc1, self.gc2,
+                      self.num_c1_genes(genomes[self.g1]),
+                      self.num_c2_genes(genomes[self.g2]))
         if args.strict:
             # No link can be larger than the number of genes in the 2nd cluster.
-            if link1 > self.num_c2_genes(genomes):
-                link1 = float(self.num_c2_genes(genomes))
+            if link1 > self.num_c2_genes(genomes[self.g2]):
+                link1 = float(self.num_c2_genes(genomes[self.g2]))
                 logging.debug('strict mode, new link1 is %s', link1)
-            if link2 > self.num_c1_genes(genomes):
-                link2 = float(self.num_c1_genes(genomes))
+            if link2 > self.num_c1_genes(genomes[self.g1]):
+                link2 = float(self.num_c1_genes(genomes[self.g1]))
                 logging.debug('strict mode, new link2 is %s', link2)
             try:
-                assert link1 <= min(self.num_c1_genes(genomes),
-                                    self.num_c2_genes(genomes)) and link2 <= min(self.num_c1_genes(genomes),
-                                                                                 self.num_c2_genes(genomes))
+                assert link1 <= min(self.num_c1_genes(genomes[self.g1]),
+                                    self.num_c2_genes(genomes[self.g2])) and link2 <= min(self.num_c1_genes(genomes[self.g1]),
+                           self.num_c2_genes(genomes[self.g2]))
             except:
                 logging.exception('c1: %s ; c2: %s', self.gc1, self.gc2)
-                logging.exception('c1_genes: %s (c1: %s)', self.num_c1_genes(genomes),
+                logging.exception('c1_genes: %s (c1: %s)', self.num_c1_genes(genomes[self.g1]),
                                   genomes[self.g1].cluster2genes[self.c1])
-                logging.exception('c2_genes: %s (c2: %s)', self.num_c2_genes(genomes),
+                logging.exception('c2_genes: %s (c2: %s)', self.num_c2_genes(genomes[self.g2]),
                                   genomes[self.g2].cluster2genes[self.c2])
                 logging.exception('link1: %s ; link2: %s ; c1_genes: %s ; c2_genes: %s',
-                                  link1, link2, self.num_c1_genes(genomes),
-                                  self.num_c2_genes(genomes))
+                                  link1, link2, self.num_c1_genes(genomes[self.g1]),
+                                  self.num_c2_genes(genomes[self.g2]))
                 raise
         self.link1 = link1
         self.link2 = link2
 
 
-    def CDS_identities(self, genomes, cutoff, fulldp):
+    def CDS_identities(self, g1, g2, cutoff, fulldp):
         '''
         Calculate per-gene-pair protein identity, and also average
         protein identity for cluster pair. Calculate average protein identity.
         Populate lists self.genes_with_pairs[genome] with geneids which have pairs.
         Save all values to self.
+        g1 and g2 are genomes[g1] and genomes[g2], respectively.
         '''
         GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
         # Get genelists for both clusters.
-        gl1 = genomes[self.g1].cluster2genes[self.c1]
-        gl2 = genomes[self.g2].cluster2genes[self.c2]
+        gl1 = g1.cluster2genes[self.c1]
+        gl2 = g2.cluster2genes[self.c2]
         # Iterate all pairs of genes of this cluster pair.
         gene_pairs = []
         # Make /tmp file and open it for writing.
         with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
             for gene1, gene2 in itertools.product(gl1, gl2):
                 #logging.debug('gene1, gene2: %s, %s', gene1, gene2)
-                seq1 = genomes[self.g1].get_protein(gene1.split(':')[0])
+                seq1 = g1.get_protein(gene1.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene1, seq1))
-                seq2 = genomes[self.g2].get_protein(gene2.split(':')[0])
+                seq2 = g2.get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
             # seqfile is open for writing when usearch runs, so better at least flush it
@@ -236,7 +239,7 @@ class ClusterPair(object):
         del gene_pairs, seen_1, seen_2, sum_identities, num_pairs
 
 
-    def gene_order(self, genomes):
+    def gene_order(self, genome1, genome2):
         '''
         Are similar genes in the same order or not?
         '''
@@ -245,16 +248,16 @@ class ClusterPair(object):
         # (from lower to higher cluster coordinate).
         inds = {self.gc1: [], self.gc2: []}
         # 'gene' is a GeneOrder namedtuple, (start, strand, locus_tag:genome_id).
-        for gene in genomes[self.g1].orderstrands[self.c1]: # iterate all cluster 1 genes
+        for gene in genome1.orderstrands[self.c1]: # iterate all cluster 1 genes
             if gene.geneid in self.gene1_to_gene2: # check if this gene has an identity pair
                 # Offset indices by 1 (they start from 0, might be problematic for stats).
-#                print(genomes[self.g1].orderstrands[self.c1])
-                inds[self.gc1].append(genomes[self.g1].orderstrands[self.c1].index(gene) + 1)
+#                print(genome1.orderstrands[self.c1])
+                inds[self.gc1].append(genome1.orderstrands[self.c1].index(gene) + 1)
                 # Get the corresponding gene position from cluster 2.
                 gene2_name = self.gene1_to_gene2[gene.geneid]
-                gene2_feature = genomes[self.g2].get_feature_by_locustag(gene2_name.split(':')[0]).feature
+                gene2_feature = genome2.get_feature_by_locustag(gene2_name.split(':')[0]).feature
                 gene2 = GeneOrder(int(gene2_feature.location.start.position), gene2_feature.strand, gene2_name)
-                inds[self.gc2].append(genomes[self.g2].orderstrands[self.c2].index(gene2) + 1)
+                inds[self.gc2].append(genome2.orderstrands[self.c2].index(gene2) + 1)
 #                print(genomes[self.g2].orderstrands[self.c2])
 #        print(inds) # FIXME: debug only
         # spearman: monotonicity (same gene order, disregarding distances), less sensitive to outliers

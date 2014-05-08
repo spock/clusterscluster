@@ -374,5 +374,10 @@ class Genome(object):
         Given a gene ID (locus_tag), return namedtuple
         (feature, record_index, feature_index).
         '''
-        record_index, index = self.CDS[geneid]
-        return FeatureTuple(self.records[record_index].features[index], record_index, index)
+        try:
+            record_index, index = self.CDS[geneid]
+            return FeatureTuple(self.records[record_index].features[index], record_index, index)
+        except TypeError:
+            logging.exception('geneid %s', geneid)
+            logging.exception('genome.id %s', self.id)
+            raise
