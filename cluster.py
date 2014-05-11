@@ -1100,9 +1100,11 @@ def main():
         # Parse quickparanoid results.
         mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
-    # Counter of submitted cluster pairs.
+    # Total (theoretical) number of cluster pairs considered.
+    total_pairs = 0
+    # Counter of cluster pairs submitted to usearch.
     submitted_tasks = 0
-    # Counter of processed cluster pairs.
+    # Counter of cluster pairs with at least 1 usearch result.
     cluster_pairs_counter = 0
 
     # Open the output CSV file for writing, prepare CSV writer.
@@ -1208,6 +1210,7 @@ def main():
                 tasks.put((CPid, seqfilename))
                 logging.debug('Submitted %s with %s.', CPid, seqfilename)
         submitted_tasks += len(cluster_pairs)
+        total_pairs += len(pairslist)
         # 4. Collect results and write them to file.
         logging.debug('Collecting results.')
         for _ in range(len(cluster_pairs)):
@@ -1260,8 +1263,8 @@ def main():
     tasks.close()
     done.close()
 
-    print('Processed %s of %s cluster pairs.' % (cluster_pairs_counter,
-                                                 submitted_tasks))
+    print('Usearch non-empty for %s of %s cluster pairs (%s total).' %
+          (cluster_pairs_counter, submitted_tasks, total_pairs))
     del submitted_tasks, cluster_pairs_counter
     csvout.close()
 
