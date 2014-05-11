@@ -1215,7 +1215,8 @@ def main():
             logging.debug('Collected task %s of %s local.', _ + 1, len(cluster_pairs))
             if result == None: # no result for this cluster pair
                 continue
-            # re-create the object; FIXME: also try simply storing the entire cp in the dict, could be faster
+            # Re-create the object.
+            # FIXME: also try simply storing the entire cp in the dict, could be faster or same speed.
             (cl1, cl2, link1, link2) = cluster_pairs[result[0]]
             cp = ClusterPair(cl1, cl2)
             cp.link1, cp.link2 = link1, link2
@@ -1261,7 +1262,7 @@ def main():
 
     print('Processed %s of %s cluster pairs.' % (cluster_pairs_counter,
                                                  submitted_tasks))
-    del submitted_tasks, cluster_pairs_counter, cluster_pairs
+    del submitted_tasks, cluster_pairs_counter
     csvout.close()
 
     return 0
