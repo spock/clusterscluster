@@ -366,7 +366,8 @@ class Genome(object):
         if 'translation' in feature_tuple.feature.qualifiers:
             return feature_tuple.feature.qualifiers['translation'][0]
         else:
-            return feature_tuple.feature.extract(self.records[feature_tuple.record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)
+            feature_tuple.feature.qualifiers['translation'] = [feature_tuple.feature.extract(self.records[feature_tuple.record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)]
+            return feature_tuple.feature.qualifiers['translation'][0]
 
 
     def get_feature_by_locustag(self, geneid):

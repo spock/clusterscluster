@@ -187,9 +187,9 @@ class ClusterPair(object):
                 seq2 = g2.get_protein(gene2.split(':')[0])
                 seqfile.write(">%s\n%s\n" % (gene2, seq2))
                 assert len(seq1) > 0 and len(seq2) > 0
-            # seqfile is open for writing when usearch runs, so better at least flush it
+            # seqfile is open for writing when usearch runs, so at least flush it
             seqfile.flush()
-            # Run usearch, once. TODO: do FULL later for chosen genepairs?
+            # Run usearch.
             results = usearch(seqfile.name, cutoff, fulldp)
             if results == '':
                 # empty result: nothing above the cut-off, no similar gene pairs
@@ -217,8 +217,8 @@ class ClusterPair(object):
         gene_pairs.sort(reverse = True)
 #        print(gene_pairs)
         # Two lists to check that we have not yet seen genes from c1 and c2.
-        seen_1 = []
-        seen_2 = []
+        seen_1 = set()
+        seen_2 = set()
         # Counter of gene pairs.
         num_pairs = 0
         # Cumulative sum of identities, for average.
@@ -226,13 +226,13 @@ class ClusterPair(object):
         for pair in gene_pairs:
             if pair.g1 in seen_1 or pair.g2 in seen_2:
                 # at least one of the genes already has a pair
-                logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
+                #logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
                 continue
             # else: save a new gene identity pair!
             self.gene1_to_gene2[pair.g1] = pair.g2
             self.protein_identities[(pair.g1, pair.g2)] = pair.identity
-            seen_1.append(pair.g1)
-            seen_2.append(pair.g2)
+            seen_1.add(pair.g1)
+            seen_2.add(pair.g2)
             num_pairs += 1
             sum_identities += float(pair.identity)
         self.avg_identity = (num_pairs, sum_identities / num_pairs)
