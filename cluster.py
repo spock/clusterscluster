@@ -1193,7 +1193,7 @@ def main():
                 seqfilename = cp.pre_CDS_identities(genome1, genome2)
                 CPid = (cp.g1, cp.c1, cp.g2, cp.c2)
                 # Save (partially) attributes of the cp object.
-                cluster_pairs[CPid] = (cl1, cl2, cp.link1, cp.link2)
+                cluster_pairs[CPid] = cp
                 tasks.put((CPid, seqfilename))
                 logging.debug('Submitted %s with %s.', CPid, seqfilename)
         submitted_tasks += len(cluster_pairs)
@@ -1205,11 +1205,8 @@ def main():
             logging.debug('Collected task %s of %s local.', _ + 1, len(cluster_pairs))
             if result == None: # no result for this cluster pair
                 continue
-            # Re-create the object.
-            # FIXME: also try simply storing the entire cp in the dict, could be faster or same speed.
-            (cl1, cl2, link1, link2) = cluster_pairs[result[0]]
-            cp = ClusterPair(cl1, cl2)
-            cp.link1, cp.link2 = link1, link2
+            # Get cp back from cluster_pairs dict.
+            cp = cluster_pairs[result[0]]
             cp.avg_identity, cp.gene1_to_gene2, cp.protein_identities = result[1]
             cluster_pairs_counter += 1
             #logging.debug('Average identity of %s and %s is %s ',
