@@ -634,7 +634,7 @@ def preprocess_input_files(inputs, args):
     del workers
     # 5. Start collecting results.
     # First, empty 'inputs'; this preserves reference to the external 'inputs'.
-    for k in list(inputs.iterkeys()):
+    for k in inputs.keys():
         del inputs[k]
     for _ in range(total_genomes):
         g = done_queue.get()
