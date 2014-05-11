@@ -50,6 +50,7 @@ from shutil import move
 from argparse import ArgumentParser
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations, product, combinations_with_replacement
+from collections import defaultdict
 
 from lib import utils
 from lib.ClusterPair import ClusterPair, Cluster
@@ -57,7 +58,7 @@ from lib.Genome import Genome
 from lib.MultiParanoid import MultiParanoid
 
 
-__all__ = []
+#__all__ = []
 __version__ = 0.7
 __date__ = '2013-07-10'
 __updated__ = '2014-05-11'
@@ -429,10 +430,10 @@ def process(all_clusters, inputs, paranoid, args):
     species = inputs.keys()
     # 2-level nested dict of cluster pairs link weights,
     # e.g. cluster_weights['A'] = {'B': 0.95, ...}
-    # TODO: replace with numpy matrix/array
-    cluster_weights = {}
+    # TODO: replace with numpy matrix/array, or SymKeyDict()
+    cluster_weights = defaultdict(dict)
     # Same as above, but without duplicate links to other species.
-    weights_clean = {} # ????
+    weights_clean = defaultdict(dict) # TODO: replace with numpy matrix/array, or SymKeyDict()
     # Same as cluster_weights, but only for intra-species links.
     weights_intra = {}
     # Two lists of 2-tuples with weight > threshold links between clusters.
@@ -452,10 +453,6 @@ def process(all_clusters, inputs, paranoid, args):
         logging.debug('\tassigned weight %s to %s and %s', round(weight, 2), c1, c2)
         weight_bins[bin_key(weight)] += 1
         if weight >= args.threshold:
-            if c1 not in cluster_weights:
-                cluster_weights[c1] = {}
-            if c2 not in cluster_weights:
-                cluster_weights[c2] = {}
             cluster_weights[c1][c2] = weight
             cluster_weights[c2][c1] = weight
     print('\tGenerated %s pairs between %s clusters' % (num_pairs, len(all_clusters)))
@@ -483,15 +480,13 @@ def process(all_clusters, inputs, paranoid, args):
     num_pairs_intra = 0
     for c1 in cluster_weights.iterkeys():
         # Group all linked clusters by species.
-        by_species = {}
+        by_species = defaultdict(list)
         # Populate by-species group.
         for c2 in cluster_weights[c1].iterkeys():
             if (c1, c2) in skip_list:
                 continue
             skip_list.append((c1, c2))
             skip_list.append((c2, c1))
-            if c2[0] not in by_species:
-                by_species[c2[0]] = []
             by_species[c2[0]].append((cluster_weights[c1][c2], c2))
         # Iterate all groups, filling weights_clean and weights_intra.
         for s, v in by_species.iteritems():
@@ -506,10 +501,6 @@ def process(all_clusters, inputs, paranoid, args):
                     weights_intra[onec[1]][c1] = onec[0] # mirror
                 num_pairs_intra += len(v)
             elif len(v) == 1: # Normal case: 1 linked cluster in other species.
-                if c1 not in weights_clean:
-                    weights_clean[c1] = {}
-                if v[0][1] not in weights_clean:
-                    weights_clean[v[0][1]] = {}
                 logging.debug('one-to-one: %s, %s', c1, v[0])
                 weights_clean[c1][v[0][1]] = v[0][0]
                 weights_clean[v[0][1]][c1] = v[0][0] # mirror
@@ -519,14 +510,10 @@ def process(all_clusters, inputs, paranoid, args):
                 # See detailed comment above for the reason of commenting out.
 #                best = sorted(v)[-1]
 #                weights_clean[c1][best[1]] = best[0]
-                if c1 not in weights_clean:
-                    weights_clean[c1] = {}
                 logging.debug('one-to-many: %s, %s', c1, v)
 #                    print 'best:', best
                 num_pairs += len(v)
                 for onec in v:
-                    if onec[1] not in weights_clean:
-                        weights_clean[onec[1]] = {}
                     weights_clean[c1][onec[1]] = onec[0]
                     weights_clean[onec[1]][c1] = onec[0] # mirror
     print('\t%s unique intra-species links' % num_pairs_intra)

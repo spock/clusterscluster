@@ -3,6 +3,7 @@
 from __future__ import print_function
 import csv
 import logging
+from collections import defaultdict
 
 
 class MultiParanoid(object):
@@ -23,9 +24,9 @@ class MultiParanoid(object):
         # Full list of species found in the file.
         self.species = set()
         # Mapping of each gene to the orthology clusterID(s) it belongs to.
-        self.gene2ortho = {}
+        self.gene2ortho = defaultdict(list)
         # List of all the genes in the orthology cluster with given clusterID.
-        self.ortho2genes = {}
+        self.ortho2genes = defaultdict(list)
         self.parse()
 
     def get_species_list(self):
@@ -98,12 +99,8 @@ class MultiParanoid(object):
                         continue
                     if self.no_name_conficts and row['tree_conflict'] == 'diff. names':
                         continue
-                    if row['gene'] not in self.gene2ortho:
-                        self.gene2ortho[row['gene']] = []
                     self.gene2ortho[row['gene']].append(row[idname])
                     # Build cluster-ID-to-all-genes dict of lists. row[idname] is the cluster number.
-                    if row[idname] not in self.ortho2genes:
-                        self.ortho2genes[row[idname]] = []
                     self.ortho2genes[row[idname]].append(row['gene'])
             except csv.Error as e:
                 logging.exception('file %s, line %d: %s', self.path, reader.line_num, e)
