@@ -209,11 +209,11 @@ class ClusterPair(object):
         # (from lower to higher cluster coordinate).
         inds = {self.gc1: [], self.gc2: []}
         # 'gene' is a GeneOrder namedtuple, (start, strand, locus_tag:genome_id).
-        for gene in genome1.orderstrands[self.c1]: # iterate all cluster 1 genes
+        for gene_index, gene in enumerate(genome1.orderstrands[self.c1]): # iterate all cluster 1 genes
             if gene.geneid in self.gene1_to_gene2: # check if this gene has an identity pair
                 # Offset indices by 1 (they start from 0, might be problematic for stats).
 #                print(genome1.orderstrands[self.c1])
-                inds[self.gc1].append(genome1.orderstrands[self.c1].index(gene) + 1)
+                inds[self.gc1].append(gene_index + 1)
                 # Get the corresponding gene position from cluster 2.
                 gene2_name = self.gene1_to_gene2[gene.geneid]
                 gene2_feature = genome2.get_feature_by_locustag(gene2_name.split(':')[0]).feature

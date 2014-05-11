@@ -68,6 +68,7 @@ class Genome(object):
 
 #            organism = {} # maps accessions to 'organism' field
             primary_length = 0 # current primary accession sequence length
+            # FIXME: if args.highmem, .load() the genome here, THEN process!
             for r in SeqIO.parse(infile, 'genbank', generic_dna):
                 # r.name is an accession (e.g. AF080235),
                 # r.id is a versioned accession (e.g. AF080235.1)
@@ -184,7 +185,6 @@ class Genome(object):
         logging.info('Parsing antismash2 genbank file %s.', self.as2file)
 
         # Dict of per-SeqRecord Interval trees of clusters, i.e.
-        # clustertrees[record_number] = IntervalTree()
         clustertrees = {}
         # Load list of all records.
         self.load()
@@ -194,8 +194,7 @@ class Genome(object):
             logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
             logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
         # Populate clusters tree and dict with (start, end) as keys.
-        for r in self.records:
-            record_number = self.records.index(r)
+        for record_number, r in enumerate(self.records):
             clustertrees[record_number] = IntervalTree()
             for f in r.features:
                 if f.type == 'cluster':
@@ -259,8 +258,7 @@ class Genome(object):
                                  self.id, cluster_number, f.qualifiers['product'][0],
                                  start, end, end-start)
         logging.debug('\tAssign genes to biosynthetic clusters')
-        for r in self.records:
-            record_number = self.records.index(r)
+        for record_number, r in enumerate(self.records):
             for f in r.features:
                 if f.type == 'CDS':
                     # 'cl' is a list of Intervals, each has 'start' and 'end' attributes.
