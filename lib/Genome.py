@@ -8,7 +8,7 @@ from os.path import join, exists
 from multiprocessing import cpu_count
 from bx.intervals.intersection import Interval, IntervalTree
 from collections import namedtuple
-from lib import utils
+# FIXME: this fails when profiling: from lib import utils
 from lib.gb2fasta import gb2fasta
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
 # Extension trimming is implemented as --no-extensions in antismash2,
@@ -149,7 +149,7 @@ class Genome(object):
                 as2_options.append('--no-extensions')
             as2_options.append(self.fnafile)
             logging.info('Running antismash2: %s', ' '.join(as2_options))
-            out, err, retcode = utils.execute(as2_options)
+            out, err, retcode = execute(as2_options)
             if retcode != 0:
                 logging.debug('antismash2 returned %d: %r while scanning %r, full output: %s',
                               retcode, err, self.fnafile, out)

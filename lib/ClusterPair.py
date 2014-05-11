@@ -4,11 +4,12 @@ import itertools
 from scipy import stats
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
-from utils import usearch, SymKeyDict
-from lib.Genome import GeneOrder, FeatureTuple
+from lib.Genome import GeneOrder
 
 
 Cluster = namedtuple('Cluster', ['genome', 'number'])
+GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
+Avg_Identity = namedtuple('Avg_Identity', ['num_gene_pairs', 'avg_identity'])
 
 
 class ClusterPair(object):
@@ -28,8 +29,8 @@ class ClusterPair(object):
         self.g2 = gc2.genome
         self.c2 = gc2.number
         # orthology links
-        self.link1 = 0.0
-        self.link2 = 0.0
+        self.link1 = 0
+        self.link2 = 0
         # orthology weight
         self.weight = 0.0
         # is this cluster pair intra-species?
@@ -42,11 +43,12 @@ class ClusterPair(object):
         self.c2_genes = 0
         # Gene-level protein identities, identities[(g1, g2)] = float,
         # symmetric (setting (g1, g2) makes (g2, g1) also accessible);
-        # g1 and g2 are locus_tag:genome_id strings.
-        self.protein_identities = SymKeyDict()
+        # g1 and g2 are locus_tag:genome_id strings. It is assigned later as
+        # SymKeyDict, so here it is declared as a simple dict.
+        self.protein_identities = {}
         # Single tuple for average gene-level protein identity,
         # (number_of_gene_pairs, average_identity)
-        self.avg_identity = None
+        self.avg_identity = Avg_Identity(0, 0.0)
         # Dict of genome1 genes mapped to genome2 genes (by locus_tag:genomeid),
         # only for genes which have above-cutoff identity.
         self.gene1_to_gene2 = {}
@@ -54,6 +56,15 @@ class ClusterPair(object):
         self.kendall = 0.0
         self.pearson = 0.0
         self.spearman = 0.0
+
+
+    # TODO: these custom hash/eq are not sufficient for caching: number of genes in the clusters can be different.
+    def __hash__(self):
+        return hash((self.g1, self.c1, self.g2, self.c2))
+
+
+    def __eq__(self, other):
+        return (self.g1, self.c1, self.g2, self.c2) == (other.g1, other.c1, other.g2, other.c2)
 
 
     def num_c1_genes(self, genome1):
@@ -164,79 +175,29 @@ class ClusterPair(object):
         self.link2 = link2
 
 
-    def CDS_identities(self, g1, g2, cutoff, fulldp):
+    def pre_CDS_identities(self, g1, g2):
         '''
-        Calculate per-gene-pair protein identity, and also average
-        protein identity for cluster pair. Calculate average protein identity.
-        Populate lists self.genes_with_pairs[genome] with geneids which have pairs.
-        Save all values to self.
+        Prepare for running usearch: generate/open interlaced temporary file,
+        return it.
         g1 and g2 are genomes[g1] and genomes[g2], respectively.
         '''
-        GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
         # Get genelists for both clusters.
         gl1 = g1.cluster2genes[self.c1]
         gl2 = g2.cluster2genes[self.c2]
-        # Iterate all pairs of genes of this cluster pair.
-        gene_pairs = []
         # Make /tmp file and open it for writing.
-        with NamedTemporaryFile(mode='w', dir='/tmp') as seqfile:
-            for gene1, gene2 in itertools.product(gl1, gl2):
-                #logging.debug('gene1, gene2: %s, %s', gene1, gene2)
-                seq1 = g1.get_protein(gene1.split(':')[0])
-                seqfile.write(">%s\n%s\n" % (gene1, seq1))
-                seq2 = g2.get_protein(gene2.split(':')[0])
-                seqfile.write(">%s\n%s\n" % (gene2, seq2))
-                assert len(seq1) > 0 and len(seq2) > 0
-            # seqfile is open for writing when usearch runs, so at least flush it
-            seqfile.flush()
-            # Run usearch.
-            results = usearch(seqfile.name, cutoff, fulldp)
-            if results == '':
-                # empty result: nothing above the cut-off, no similar gene pairs
-                self.avg_identity = (0, 0.0)
-                seqfile.close()
-                return
-            if results == None:
-                # error in usearch
-                logging.exception('usearch failed, see output above')
-                raise Exception('UsearchFailedError')
-            # Parse results into a list of tuples, each tuple is 1 gene pair.
-            results_list = results.strip('\n').split('\n')
-            for row in results_list:
-                try:
-                    # query, target should be from g1, g2, respectively
-                    query, target, identity = row.split('\t')
-                    gene_pairs.append(GP(identity, query, target))
-                except ValueError:
-                    print('row:')
-                    print(row)
-                    logging.exception('Failed to parse usearch output.')
-                    raise Exception('UsearchOutputParseError')
-            del results, results_list, identity, query, target
-        # Sort gene pairs by identity, descending order.
-        gene_pairs.sort(reverse = True)
-#        print(gene_pairs)
-        # Two lists to check that we have not yet seen genes from c1 and c2.
-        seen_1 = set()
-        seen_2 = set()
-        # Counter of gene pairs.
-        num_pairs = 0
-        # Cumulative sum of identities, for average.
-        sum_identities = 0.0
-        for pair in gene_pairs:
-            if pair.g1 in seen_1 or pair.g2 in seen_2:
-                # at least one of the genes already has a pair
-                #logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
-                continue
-            # else: save a new gene identity pair!
-            self.gene1_to_gene2[pair.g1] = pair.g2
-            self.protein_identities[(pair.g1, pair.g2)] = pair.identity
-            seen_1.add(pair.g1)
-            seen_2.add(pair.g2)
-            num_pairs += 1
-            sum_identities += float(pair.identity)
-        self.avg_identity = (num_pairs, sum_identities / num_pairs)
-        del gene_pairs, seen_1, seen_2, sum_identities, num_pairs
+        seqfile = NamedTemporaryFile(mode='w', dir='/tmp', delete = False)
+        # Iterate all pairs of genes of this cluster pair, write to file.
+        for gene1, gene2 in itertools.product(gl1, gl2):
+            #logging.debug('gene1, gene2: %s, %s', gene1, gene2)
+            seq1 = g1.get_protein(gene1.split(':')[0])
+            seqfile.write(">%s\n%s\n" % (gene1, seq1))
+            seq2 = g2.get_protein(gene2.split(':')[0])
+            seqfile.write(">%s\n%s\n" % (gene2, seq2))
+            assert len(seq1) > 0 and len(seq2) > 0
+        seqfile.close()
+        logging.debug('Created, opened, written to and closed seqfile %s.',
+                      seqfile.name)
+        return seqfile.name
 
 
     def gene_order(self, genome1, genome2):

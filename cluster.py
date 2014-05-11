@@ -45,7 +45,7 @@ import csv
 
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
-from os.path import exists, join, dirname, realpath, basename#, splitext
+from os.path import exists, join, dirname, realpath, basename
 from shutil import move
 from argparse import ArgumentParser
 from multiprocessing import Process, Queue, cpu_count
@@ -58,9 +58,9 @@ from lib.MultiParanoid import MultiParanoid
 
 
 __all__ = []
-__version__ = 0.6
+__version__ = 0.7
 __date__ = '2013-07-10'
-__updated__ = '2014-04-11'
+__updated__ = '2014-05-11'
 
 
 def print_cluster_numbers_row(s2c, species, tee):
@@ -1137,10 +1137,10 @@ def main():
     tasks = Queue(maxsize = cpu_count() * 4)
     done  = Queue()
     # 1. Define worker.
-    def usearcher(tasks, done):
+    def usearcher():
         '''
-        Run CDS_identitites/usearch on a single ClusterPair from 'tasks',
-        put CSV row into 'done'.
+        Run_usearch on a single NamedTemporaryFile seqfile from 'tasks' queue,
+        put (CPid, (avg_identity, gene1_to_gene2, protein_identities)) into 'done'.
         '''
         while True:
             try:
@@ -1151,38 +1151,20 @@ def main():
             if task == 'STOP':
                 #logging.debug('STOP found, exiting.')
                 break
-            cp, g1, g2 = task
             # Calculate gene-level and clusterpair-average protein identities in clusters.
-            cp.CDS_identities(g1, g2, args.cutoff, args.fulldp)
-            if cp.avg_identity[0] > 0:
-                #logging.debug('Average identity of %s and %s is %s ',
-                #              cp.gc1, cp.gc2, cp.avg_identity)
-                #print(cp.protein_identities)
-                if cp.avg_identity[0] > 2:
-                    # Calculate gene order preservation (for similar genes).
-                    cp.gene_order(g1, g2)
-                # Calculate predicted domains order preservation within similar genes.
-                #cp.domains(genomes)
-                # Calculate cluster-level nucleotide identity.
-                #cp.nucleotide_similarity(genomes)
-                row = [int(cp.intra), g1.id, g2.id,
-                       g1.species, g2.species, cp.c1, cp.c2,
-                       g1.number2products[cp.c1],
-                       g2.number2products[cp.c2],
-                       cp.num_c1_genes(g1), cp.num_c2_genes(g2),
-                       g1.clustersizes[cp.c1],
-                       g2.clustersizes[cp.c2], cp.link1, cp.link2,
-                       cp.avg_identity[0], round(cp.avg_identity[1], 1),
-                       round(cp.pearson, 2), round(cp.kendall, 2),
-                       round(cp.spearman, 2)]
-                done.put(row)
+            CPid, seqfilename = task
+            result = utils.run_usearch(seqfilename, args.cutoff, args.fulldp)
+            remove(seqfilename)
+            logging.debug('Deleted %s.', seqfilename)
+            if result != None:
+                done.put((CPid, result))
                 continue
             done.put(None)
     # 2. Start workers.
     workers_list = []
     logging.debug('Starting %s cp_processors.', cpu_count())
     for _ in range(cpu_count()):
-        p = Process(target=usearcher, args=(tasks, done))
+        p = Process(target=usearcher, args=())
         p.start()
         workers_list.append(p)
     del p
@@ -1190,9 +1172,12 @@ def main():
     for g1, g2 in combinations_with_replacement(genomes.keys(), r = 2):
         combinations_counter += 1
         print('%s / %s\t' % (combinations_counter, total_combinations), genomes[g1].id, genomes[g2].id)
+        # Unload previous "second genome", if it is not equal to the "first genome".
         if prev_g1 and g1 != prev_g1:
             genomes[prev_g1].unload()
             prev_g1 = g1
+        # Dict of ClusterPairs cl1/cl2 init vars, and link1/link2 attributes, for this pair of genomes.
+        cluster_pairs = {}
         genomes[g1].load()
         genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
         genome1 = genomes[g1]
@@ -1208,33 +1193,59 @@ def main():
             pairslist = [(Cluster(g1, c1), Cluster(g2, c2))
                          for c1, c2 in product(genome1.clusters,
                                                genome2.clusters)]
-        # Genome-pair specific counter of submitted tasks.
-        local_submitted = 0
         # 3. Populate tasks queue.
+        logging.debug('Populating usearcher tasks queue.')
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
             if not args.skip_orthology:
                 cp.assign_orthologous_link(mp, genomes, args)
-            # Not checking cp.link1 > 0 or cp.link2 > 0 with args.skip_orthology
-            local_submitted += 1
-            # Have to pass entire genomes, as usearcher is defined before we .load() any genomes.
-            tasks.put((cp, genome1, genome2))
-            #logging.debug('Local-submitted %s.', local_submitted)
-        submitted_tasks += local_submitted
+            if args.skip_orthology or cp.link1 > 0 or cp.link2 > 0:
+                # Prepare for running usearch.
+                seqfilename = cp.pre_CDS_identities(genome1, genome2)
+                CPid = (cp.g1, cp.c1, cp.g2, cp.c2)
+                # Save (partially) attributes of the cp object.
+                cluster_pairs[CPid] = (cl1, cl2, cp.link1, cp.link2)
+                tasks.put((CPid, seqfilename))
+                logging.debug('Submitted %s with %s.', CPid, seqfilename)
+        submitted_tasks += len(cluster_pairs)
         # 4. Collect results and write them to file.
-        #logging.debug('Collecting results.')
-        for _ in range(local_submitted):
-            row = done.get()
-            #logging.debug('Collected task %s of %s local.', _ + 1, local_submitted)
-            if row == None: # no result for this cluster pair
+        logging.debug('Collecting results.')
+        for _ in range(len(cluster_pairs)):
+            result = done.get()
+            logging.debug('Collected task %s of %s local.', _ + 1, len(cluster_pairs))
+            if result == None: # no result for this cluster pair
                 continue
+            # re-create the object; FIXME: also try simply storing the entire cp in the dict, could be faster
+            (cl1, cl2, link1, link2) = cluster_pairs[result[0]]
+            cp = ClusterPair(cl1, cl2)
+            cp.link1, cp.link2 = link1, link2
+            cp.avg_identity, cp.gene1_to_gene2, cp.protein_identities = result[1]
             cluster_pairs_counter += 1
-            writer.writerow(row)
-        #logging.debug('Done collecting results.')
+            #logging.debug('Average identity of %s and %s is %s ',
+            #              cp.gc1, cp.gc2, cp.avg_identity)
+            #print(cp.protein_identities)
+            if cp.avg_identity[0] > 2:
+                # Calculate gene order preservation (for similar genes).
+                cp.gene_order(genome1, genome2)
+            # Calculate predicted domains order preservation within similar genes.
+            #cp.domains(genomes)
+            # Calculate cluster-level nucleotide identity.
+            #cp.nucleotide_similarity(genomes)
+            writer.writerow([int(cp.intra), genome1.id, genome2.id,
+                   genome1.species, genome2.species, cp.c1, cp.c2,
+                   genome1.number2products[cp.c1],
+                   genome2.number2products[cp.c2],
+                   cp.num_c1_genes(genome1), cp.num_c2_genes(genome2),
+                   genome1.clustersizes[cp.c1],
+                   genome2.clustersizes[cp.c2], cp.link1, cp.link2,
+                   cp.avg_identity[0], round(cp.avg_identity[1], 1),
+                   round(cp.pearson, 2), round(cp.kendall, 2),
+                   round(cp.spearman, 2)])
+        logging.debug('Done collecting results.')
 
         if g1 != g2:
             genomes[g2].unload()
-        del genome1, genome2
+        del genome1, genome2, cluster_pairs
 
     # 5. Add STOP messages.
     logging.debug('Adding %s STOP messages to tasks.', cpu_count())
@@ -1250,7 +1261,7 @@ def main():
 
     print('Processed %s of %s cluster pairs.' % (cluster_pairs_counter,
                                                  submitted_tasks))
-    del submitted_tasks, cluster_pairs_counter
+    del submitted_tasks, cluster_pairs_counter, cluster_pairs
     csvout.close()
 
     return 0

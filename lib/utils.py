@@ -1,5 +1,6 @@
 import subprocess
 import logging
+from lib.ClusterPair import GP, Avg_Identity
 
 
 # Method borrowed from antismash.utils
@@ -46,6 +47,73 @@ def usearch(interleaved, cutoff = 0.4, full = False):
             print(fh.read())
     else:
         return out
+
+
+def run_usearch(seqfilename, cutoff, fulldp):
+    '''
+    Wrapper for usearch(): run usearch() and parse/return results.
+    seqfile: NamedTemporaryFile object
+    cutoff: minimal identity for usearch
+    fulldp: use full dynamic programming solution (~10x slower)
+    Calculate per-gene-pair protein identity, and also average
+    protein identity for cluster pair.
+    Return value: avg_identity, gene1_to_gene2, protein_identities
+    '''
+    # Dict of genome1 genes mapped to genome2 genes (by locus_tag:genomeid),
+    # only for genes which have above-cutoff identity.
+    gene1_to_gene2 = {}
+    # Gene-level protein identities, identities[(g1, g2)] = float,
+    # symmetric (setting (g1, g2) makes (g2, g1) also accessible);
+    # g1 and g2 are locus_tag:genome_id strings.
+    protein_identities = SymKeyDict()
+    gene_pairs = []
+    results = usearch(seqfilename, cutoff, fulldp)
+    if results == '':
+        # Empty result: nothing above the cut-off, no similar gene pairs.
+        return None
+    if results == None:
+        # Error in usearch().
+        logging.exception('usearch failed, see output above')
+        raise Exception('UsearchFailedError')
+    # Parse results into a list of tuples, each tuple is 1 gene pair.
+    results_list = results.strip('\n').split('\n')
+    for row in results_list:
+        try:
+            # Query, target should be from g1, g2, respectively.
+            query, target, identity = row.split('\t')
+            gene_pairs.append(GP(identity, query, target))
+        except ValueError:
+            print('row:')
+            print(row)
+            logging.exception('Failed to parse usearch output.')
+            raise Exception('UsearchOutputParseError')
+    del results, results_list, identity, query, target
+    # Sort gene pairs by identity, descending order.
+    gene_pairs.sort(reverse = True)
+    #print(gene_pairs)
+    # Two sets to check that we have not yet seen genes from c1 and c2.
+    seen_1 = set()
+    seen_2 = set()
+    # Counter of gene pairs.
+    num_pairs = 0
+    # Cumulative sum of identities, for average.
+    sum_identities = 0.0
+    for pair in gene_pairs:
+        if pair.g1 in seen_1 or pair.g2 in seen_2:
+            # at least one of the genes already has a pair
+            #logging.debug('either %s or %s already has a pair', pair.g1, pair.g2)
+            continue
+        # else: save a new gene identity pair!
+        gene1_to_gene2[pair.g1] = pair.g2
+        protein_identities[(pair.g1, pair.g2)] = pair.identity
+        seen_1.add(pair.g1)
+        seen_2.add(pair.g2)
+        num_pairs += 1
+        sum_identities += float(pair.identity)
+    avg_identity = Avg_Identity(num_pairs, sum_identities / num_pairs)
+    del gene_pairs, seen_1, seen_2, sum_identities, num_pairs
+    return avg_identity, gene1_to_gene2, protein_identities
+
 
 class SymKeyDict(dict):
     '''
