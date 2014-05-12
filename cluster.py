@@ -1091,6 +1091,8 @@ def main():
 
     # Setup cache directories.
     ortholinks = realpath(join(args.project, 'ortholinks_' + str(int(args.cutoff * 100))))
+    if args.fulldp:
+        ortholinks += '_fulldp'
     if not exists(ortholinks):
         mkdir(ortholinks)
     usearch = realpath(join(args.project, 'usearch'))
