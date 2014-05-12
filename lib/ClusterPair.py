@@ -140,36 +140,33 @@ class ClusterPair(object):
         '''
         Assign orthologous link to this cluster pair.
         '''
-        # TODO: cleanup, can replace num_cx_genes(genomes[self]) with a variable
         link1, link2 = self.calculate_links(mp, genomes)
         # Make sure the number of links never exceeds the number of genes.
-        link1 = min(link1, self.num_c1_genes(genomes[self.g1]))
-        link2 = min(link2, self.num_c2_genes(genomes[self.g2]))
+        genes_1 = self.num_c1_genes(genomes[self.g1])
+        genes_2 = self.num_c2_genes(genomes[self.g2])
+        link1 = min(link1, genes_1)
+        link2 = min(link2, genes_2)
         logging.debug('\tlink1= %s and link2= %s for %s and %s, %s/%s genes',
-                      link1, link2, self.gc1, self.gc2,
-                      self.num_c1_genes(genomes[self.g1]),
-                      self.num_c2_genes(genomes[self.g2]))
+                      link1, link2, self.gc1, self.gc2, genes_1, genes_2)
         if args.strict:
             # No link can be larger than the number of genes in the 2nd cluster.
-            if link1 > self.num_c2_genes(genomes[self.g2]):
-                link1 = float(self.num_c2_genes(genomes[self.g2]))
+            if link1 > genes_2:
+                link1 = genes_2
                 logging.debug('strict mode, new link1 is %s', link1)
-            if link2 > self.num_c1_genes(genomes[self.g1]):
-                link2 = float(self.num_c1_genes(genomes[self.g1]))
+            if link2 > genes_1:
+                link2 = genes_1
                 logging.debug('strict mode, new link2 is %s', link2)
             try:
-                assert link1 <= min(self.num_c1_genes(genomes[self.g1]),
-                                    self.num_c2_genes(genomes[self.g2])) and link2 <= min(self.num_c1_genes(genomes[self.g1]),
-                           self.num_c2_genes(genomes[self.g2]))
+                assert link1 <= min(genes_1, genes_2) and link2 <= min(genes_1,
+                                                                       genes_2)
             except:
                 logging.exception('c1: %s ; c2: %s', self.gc1, self.gc2)
-                logging.exception('c1_genes: %s (c1: %s)', self.num_c1_genes(genomes[self.g1]),
+                logging.exception('c1_genes: %s (c1: %s)', genes_1,
                                   genomes[self.g1].cluster2genes[self.c1])
-                logging.exception('c2_genes: %s (c2: %s)', self.num_c2_genes(genomes[self.g2]),
+                logging.exception('c2_genes: %s (c2: %s)', genes_2,
                                   genomes[self.g2].cluster2genes[self.c2])
                 logging.exception('link1: %s ; link2: %s ; c1_genes: %s ; c2_genes: %s',
-                                  link1, link2, self.num_c1_genes(genomes[self.g1]),
-                                  self.num_c2_genes(genomes[self.g2]))
+                                  link1, link2, genes_1, genes_2)
                 raise
         self.link1 = link1
         self.link2 = link2
