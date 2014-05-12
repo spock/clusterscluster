@@ -1090,7 +1090,7 @@ def main():
 
 
     # Setup cache directories.
-    ortholinks = realpath(join(args.project, 'ortholinks'))
+    ortholinks = realpath(join(args.project, 'ortholinks_' + str(int(args.cutoff * 100))))
     if not exists(ortholinks):
         mkdir(ortholinks)
     usearch = realpath(join(args.project, 'usearch'))
@@ -1159,7 +1159,7 @@ def main():
             if result != None:
                 done.put((CPid, result))
                 continue
-            done.put(None)
+            done.put((CPid, None))
     # 2. Start workers.
     workers_list = []
     logging.debug('Starting %s cp_processors.', cpu_count())
@@ -1184,8 +1184,8 @@ def main():
         genome2 = genomes[g2]
 
         # Load caches, if any.
-        pair_id = '_'.join(g1, genome1.total_genes_in_clusters,
-                           g2, genome2.total_genes_in_clusters)
+        pair_id = '_'.join([g1, str(genome1.total_genes_in_clusters),
+                            g2, str(genome2.total_genes_in_clusters)])
         ortho_file = join(ortholinks, pair_id)
         if exists(ortho_file):
             with open(ortho_file) as ortho_handle:
@@ -1242,7 +1242,10 @@ def main():
         for _ in range(len(cluster_pairs)):
             result = done.get()
             logging.debug('Collected task %s of %s local.', _ + 1, len(cluster_pairs))
-            if result == None: # no result for this cluster pair
+            if result[1] == None: # no result for this cluster pair
+                # Still save this to the cache
+                if result[0] not in usearchcache:
+                    usearchcache[result[0]] = None
                 continue
             # Get cp back from cluster_pairs dict.
             cp = cluster_pairs[result[0]]
@@ -1275,9 +1278,9 @@ def main():
         if g1 != g2 and not args.highmem:
             genomes[g2].unload()
         # Save caches.
-        with open(ortho_file) as ortho_handle:
+        with open(ortho_file, 'w') as ortho_handle:
             pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
-        with open(usearch_file) as usearch_handle:
+        with open(usearch_file, 'w') as usearch_handle:
             pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
         del genome1, genome2, cluster_pairs
 
