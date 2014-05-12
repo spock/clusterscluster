@@ -42,6 +42,7 @@ import logging
 import os
 import glob
 import csv
+import cPickle as pickle
 
 from pprint import pprint
 from os import mkdir, symlink, getcwd, chdir, remove
@@ -1084,9 +1085,18 @@ def main():
     if not args.skip_orthology:
         result_path = run_quickparanoid(inparanoidir, faafiles, args.project)
         del inparanoidir, faafiles
-
         # Parse quickparanoid results.
         mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
+
+
+    # Setup cache directories.
+    ortholinks = realpath(join(args.project, 'ortholinks'))
+    if not exists(ortholinks):
+        mkdir(ortholinks)
+    usearch = realpath(join(args.project, 'usearch'))
+    if not exists(usearch):
+        mkdir(usearch)
+
 
     # Total (theoretical) number of cluster pairs considered.
     total_pairs = 0
@@ -1166,12 +1176,30 @@ def main():
         if not args.highmem and prev_g1 and g1 != prev_g1:
             genomes[prev_g1].unload()
             prev_g1 = g1
-        # Dict of ClusterPairs cl1/cl2 init vars, and link1/link2 attributes, for this pair of genomes.
+        # Dict of ClusterPairs, for this pair of genomes.
         cluster_pairs = {}
         genomes[g1].load()
         genomes[g2].load() # if g1 == g2, this will do nothing (g1 already loaded)
         genome1 = genomes[g1]
         genome2 = genomes[g2]
+
+        # Load caches, if any.
+        pair_id = '_'.join(g1, genome1.total_genes_in_clusters,
+                           g2, genome2.total_genes_in_clusters)
+        ortho_file = join(ortholinks, pair_id)
+        if exists(ortho_file):
+            with open(ortho_file) as ortho_handle:
+                orthocache = pickle.load(ortho_handle)
+        else:
+            orthocache = {}
+        usearch_file = join(usearch, pair_id)
+        if exists(usearch_file):
+            with open(usearch_file) as usearch_handle:
+                usearchcache = pickle.load(usearch_handle)
+        else:
+            usearchcache = {}
+        del pair_id
+
         # Iterate all possible cluster pairs between these 2 genomes, generate cluster pairs.
         # When g1 == g2, multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc) would happen with 'product'.
         if g1 == g2:
@@ -1187,16 +1215,26 @@ def main():
         logging.debug('Populating usearcher tasks queue.')
         for cl1, cl2 in pairslist:
             cp = ClusterPair(cl1, cl2)
+            CPid = (cp.g1, cp.c1, cp.g2, cp.c2)
             if not args.skip_orthology:
-                cp.assign_orthologous_link(mp, genomes, args)
+                # Check cache.
+                if CPid in orthocache:
+                    cp.link1, cp.link2 = orthocache[CPid]
+                else:
+                    cp.assign_orthologous_link(mp, genomes, args)
+                    orthocache[CPid] = (cp.link1, cp.link2)
             if args.skip_orthology or cp.link1 > 0 or cp.link2 > 0:
-                # Prepare for running usearch.
-                seqfilename = cp.pre_CDS_identities(genome1, genome2)
-                CPid = (cp.g1, cp.c1, cp.g2, cp.c2)
-                # Save (partially) attributes of the cp object.
+                # Check cache.
+                if CPid in usearchcache:
+                    # usearch[CPid] = (cp.avg_identity, cp.gene1_to_gene2, cp.protein_identities)
+                    done.put((CPid, usearchcache[CPid]))
+                else:
+                    # Prepare for running usearch.
+                    seqfilename = cp.pre_CDS_identities(genome1, genome2)
+                    tasks.put((CPid, seqfilename))
+                    logging.debug('Submitted %s with %s.', CPid, seqfilename)
+                # Save the cp object for re-use.
                 cluster_pairs[CPid] = cp
-                tasks.put((CPid, seqfilename))
-                logging.debug('Submitted %s with %s.', CPid, seqfilename)
         submitted_tasks += len(cluster_pairs)
         total_pairs += len(pairslist)
         # 4. Collect results and write them to file.
@@ -1209,6 +1247,8 @@ def main():
             # Get cp back from cluster_pairs dict.
             cp = cluster_pairs[result[0]]
             cp.avg_identity, cp.gene1_to_gene2, cp.protein_identities = result[1]
+            if result[0] not in usearchcache: # CPid
+                usearchcache[result[0]] = result[1]
             cluster_pairs_counter += 1
             #logging.debug('Average identity of %s and %s is %s ',
             #              cp.gc1, cp.gc2, cp.avg_identity)
@@ -1234,6 +1274,11 @@ def main():
 
         if g1 != g2 and not args.highmem:
             genomes[g2].unload()
+        # Save caches.
+        with open(ortho_file) as ortho_handle:
+            pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
+        with open(usearch_file) as usearch_handle:
+            pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
         del genome1, genome2, cluster_pairs
 
     # 5. Add STOP messages.
