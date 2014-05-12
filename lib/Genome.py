@@ -66,9 +66,8 @@ class Genome(object):
             # for later collinearity analysis.
             self.orderstrands = {}
 
-#            organism = {} # maps accessions to 'organism' field
             primary_length = 0 # current primary accession sequence length
-            # FIXME: if args.highmem, .load() the genome here, THEN process!
+
             for r in SeqIO.parse(infile, 'genbank', generic_dna):
                 # r.name is an accession (e.g. AF080235),
                 # r.id is a versioned accession (e.g. AF080235.1)
@@ -150,7 +149,7 @@ class Genome(object):
                 as2_options.append('--no-extensions')
             as2_options.append(self.fnafile)
             logging.info('Running antismash2: %s', ' '.join(as2_options))
-            out, err, retcode = execute(as2_options)
+            out, err, retcode = utils.execute(as2_options)
             if retcode != 0:
                 logging.debug('antismash2 returned %d: %r while scanning %r, full output: %s',
                               retcode, err, self.fnafile, out)
@@ -298,7 +297,8 @@ class Genome(object):
                                                              len(self.cluster2genes),
                                                              self.total_genes_in_clusters))
         del clustertrees
-        self.unload()
+        if not args.highmem:
+            self.unload()
 
 
     def load(self):

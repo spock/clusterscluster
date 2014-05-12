@@ -992,6 +992,7 @@ def main():
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
     parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
     parser.add_argument("--fulldp", dest="fulldp", action="store_true", default=False, help="use full dynamic programming solution in usearch alignment (much slower!) [default: %(default)s]")
+    parser.add_argument("--highmem", dest="highmem", action="store_true", default=False, help="assume huge RAM: all GenBanks are loaded early and kept in RAM (faster processing) [default: %(default)s]")
     parser.add_argument("--cutoff", dest="cutoff", type = float, default = 0.4, help="protein identity cut-off when aligning with usearch [default: %(default)s]")
     parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
     parser.add_argument("--skip-orthology", action="store_true", default=False, help="do not run any orthology analysis [default: %(default)s]")
@@ -1162,7 +1163,7 @@ def main():
         combinations_counter += 1
         print('%s / %s\t' % (combinations_counter, total_combinations), genomes[g1].id, genomes[g2].id)
         # Unload previous "second genome", if it is not equal to the "first genome".
-        if prev_g1 and g1 != prev_g1:
+        if not args.highmem and prev_g1 and g1 != prev_g1:
             genomes[prev_g1].unload()
             prev_g1 = g1
         # Dict of ClusterPairs cl1/cl2 init vars, and link1/link2 attributes, for this pair of genomes.
@@ -1231,7 +1232,7 @@ def main():
                    round(cp.spearman, 2)])
         logging.debug('Done collecting results.')
 
-        if g1 != g2:
+        if g1 != g2 and not args.highmem:
             genomes[g2].unload()
         del genome1, genome2, cluster_pairs
 
