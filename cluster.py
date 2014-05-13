@@ -1088,17 +1088,15 @@ def main():
         # Parse quickparanoid results.
         mp = MultiParanoid(result_path, args.no_tree_problems, args.no_name_problems)
 
-
     # Setup cache directories.
-    ortholinks = realpath(join(args.project, 'ortholinks_' + str(int(args.cutoff * 100))))
-    if args.fulldp:
-        ortholinks += '_fulldp'
+    ortholinks = realpath(join(args.project, 'ortholinks'))
     if not exists(ortholinks):
         mkdir(ortholinks)
-    usearch = realpath(join(args.project, 'usearch'))
+    usearch = realpath(join(args.project, 'usearch_' + str(int(args.cutoff * 100))))
+    if args.fulldp:
+        usearch += '_fulldp'
     if not exists(usearch):
         mkdir(usearch)
-
 
     # Total (theoretical) number of cluster pairs considered.
     total_pairs = 0
