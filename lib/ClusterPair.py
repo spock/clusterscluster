@@ -5,6 +5,7 @@ from scipy import stats
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
 from lib.Genome import GeneOrder
+from lib.MultiParanoid import gene2species
 
 
 Cluster = namedtuple('Cluster', ['genome', 'number'])
@@ -128,6 +129,11 @@ class ClusterPair(object):
                       self.c1, self.gc2)
         for gene in genomes[self.g1].cluster2genes[self.c1]: # FIXME: too slow
             # 'gene' is a 'locus_tag:genome_id' string.
+            # TODO: convert gene from 'locus_tag:genome_id' to (locus_tag, genome_id) in:
+            #  - Genome.cluster2genes
+            #  - ClusterPair calculate_links
+            # FIXME: optimize get_gene_links_to_bioclusters so that it stops as soon as self.gc2 is found! same below
+            # FIXME: get_gene_links_to_bioclusters should return either 0 or 1, depending on whether clusters share a link.
             if self.gc2 in self.get_gene_links_to_bioclusters(gene, mp, genomes):
                 links1 += 1
         logging.debug("Looking at %s genes in cluster %s (1st is %s)...",

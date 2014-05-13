@@ -1280,6 +1280,7 @@ def main():
         # Save caches.
         with open(ortho_file, 'w') as ortho_handle:
             pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
+            #logging.debug('Dumped orthocache: %s', orthocache)
         with open(usearch_file, 'w') as usearch_handle:
             pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
         del genome1, genome2, cluster_pairs

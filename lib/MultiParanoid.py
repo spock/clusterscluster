@@ -1,9 +1,16 @@
-
-
 from __future__ import print_function
 import csv
 import logging
 from collections import defaultdict
+
+
+def gene2species(gene):
+    '''
+    Given a complex gene ID like SAV_1680:BA000030, return tuple (gene, species) like
+    (SAV_1680, BA000030), where SAV_1680 is a locus_tag, and BA000030 is a genome id.
+    '''
+    pos = gene.find(':')
+    return (gene[:pos], gene[pos + 1:])
 
 
 class MultiParanoid(object):
@@ -70,13 +77,6 @@ class MultiParanoid(object):
                 common += 1
         return common
 
-    def gene2species(self, gene):
-        '''
-        Given a complex gene ID like SAV_1680:BA000030, return the part after the
-        colon (BA000030 in this example), which is the LOCUS of the gene's genome.
-        '''
-        return gene[gene.find(':')+1:]
-
     def parse(self):
         logging.info('Reading quick/multi-paranoid gene clusters:')
         with open(self.path) as tsv:
@@ -86,6 +86,7 @@ class MultiParanoid(object):
             reader = csv.DictReader(tsv, delimiter = '\t')
             try:
                 for row in reader:
+                    # FIXME: only do header check/assignment on the 1st row, not every row.
                     # Understand both Multi- and Quick-paranoid files.
                     if '#clusterID' in row:
                         # QuickParanoid
