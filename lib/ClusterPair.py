@@ -94,6 +94,9 @@ class ClusterPair(object):
             return [] # `gene` does not belong to any group of orthologs
 #        logging.debug('Gene %s is in mp.gene2ortho.', gene)
         bioclusters = []
+        # FIXME: collapse calls to gene2ortho and ortho2genes into gene2genes:
+        # gene2genes[gene.genome][gene.id] = [other.gene1, other.gene2, ...]
+        # TODO: maybe store gene names not as genome:gene, but as (genome, gene)?
         for orthoclust in mp.gene2ortho[gene]:
 #            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
             for xeno_gene in mp.ortho2genes[orthoclust]:
