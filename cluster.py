@@ -623,7 +623,7 @@ def preprocess_input_files(inputs, args):
         p = Process(target=geneparser, args=(task_queue, done_queue, args))
         p.start()
         workers_list.append(p)
-    del _, p
+    del p
     # 3. Populate tasks.
     logging.debug("Populating task_queue.")
     for g in inputs.itervalues():
@@ -648,7 +648,7 @@ def preprocess_input_files(inputs, args):
     logging.debug("Joining processes.")
     for p in workers_list:
         p.join()
-    del p, workers_list, total_genomes
+    del workers_list, total_genomes
     task_queue.close()
     done_queue.close()
 
@@ -738,14 +738,14 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         p = Process(target=single_blaster, args=(tasks, total_genomes))
         workers.append(p)
         p.start()
-    del _, p
+    del p
     # 3. Populate the tasks queue.
     logging.debug("Populating the queue.")
     counter = 0
     for _ in faafiles:
         counter += 1
         tasks.put((counter, _)) # will block until all-qsize items are consumed
-    del _, counter
+    del counter
     # 4. Add STOP messages.
     logging.debug("Adding %s STOP messages to task_queue.", num_workers)
     for _ in range(num_workers):
@@ -755,7 +755,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     for p in workers:
         p.join()
     tasks.close()
-    del p, total_genomes, workers
+    del total_genomes, workers
 
     total_permutations = len(list(permutations(faafiles, 2)))
     tasks = Queue(maxsize = qsize)
@@ -794,7 +794,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         p = Process(target=pair_blaster, args=(tasks, total_permutations))
         workers.append(p)
         p.start()
-    del _, p
+    del p
     # 3. Populate the tasks queue.
     logging.debug("Populating the queue.")
     counter = 0
@@ -813,7 +813,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
                 del formatdb, out, err, retcode
         counter += 1
         tasks.put((counter, pair[0], pair[1])) # will block until all-qsize items are consumed
-    del pair, counter
+    del counter
     # 4. Add STOP messages.
     logging.debug("Adding %s STOP messages to task_queue.", num_workers)
     for _ in range(num_workers):
@@ -823,7 +823,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     for p in workers:
         p.join()
     tasks.close()
-    del p, total_permutations, workers
+    del total_permutations, workers
 
     if not emulate_inparanoid:
         total_combinations = len(list(combinations(faafiles, 2)))
@@ -861,7 +861,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
             p = Process(target=inparanoider, args=(tasks, total_combinations))
             workers.append(p)
             p.start()
-        del _, p
+        del p
         # 3. Populate the tasks queue.
         logging.debug("Populating the queue.")
         counter = 0
@@ -873,12 +873,11 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
         logging.debug("Adding %s STOP messages to task_queue.", num_workers)
         for _ in range(num_workers):
             tasks.put((0, 'STOP', ''))
-        del _
         # 5. Wait for all processes to finish, close the queue.
         for p in workers:
             p.join()
         tasks.close()
-        del p, total_combinations, workers, num_workers
+        del total_combinations, workers, num_workers
     else:
         logging.info('Skipped inparanoid analysis because of --emulate-inparanoid.')
 
@@ -956,7 +955,6 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h',
               '__ortholog.h']:
         remove(join(quickparanoid, _))
-    del _
 
     # Get back from quickparanoid.
     project_dir = join(curr_path, project)
@@ -1037,7 +1035,6 @@ def main():
             with open(args.from_file) as from_handle:
                 for _ in from_handle:
                     args.paths.append(_.strip())
-                del _
         else:
             logging.exception("File %s does not exist.", args.from_file)
             raise Exception("FileDoesNotExistError")
