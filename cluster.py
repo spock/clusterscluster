@@ -1057,9 +1057,9 @@ def main():
 
     if exists(args.project):
         if args.force:
-            logging.warning('Re-using existing project directory "%s" as requested.' % args.project)
+            logging.warning('Re-using existing project directory "%s" as requested.', args.project)
         else:
-            logging.error('Specified project directory "%s" already exists! Use --force to continue anyway.' % args.project)
+            logging.error('Specified project directory "%s" already exists! Use --force to continue anyway.', args.project)
             sys.exit(1)
     else: # create
         mkdir(args.project)

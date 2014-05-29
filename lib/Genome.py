@@ -249,7 +249,7 @@ class Genome(object):
                     except:
                         logging.exception("Cluster %s coordinates (%s, %s) collision in %s.",
                                           cluster_number, start, end, self.id)
-                        logging.debug('coords2numbers', self.coords2numbers)
+                        logging.debug('coords2numbers: %s', self.coords2numbers)
                         raise
                     self.coords2numbers[(start, end)] = cluster_number
                     self.clustersizes[cluster_number] = end - start
