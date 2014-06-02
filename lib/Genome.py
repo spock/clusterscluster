@@ -30,75 +30,75 @@ class Genome(object):
     '''
 
     def __init__(self, infile, project):
-            '''
-            infile: path to the original GenBank file for this genome
-            project: path to the project directory, which has all the derivative files
-            '''
-            self.infile = infile
-            self.project = project
-            self.species = ''
-            self.accession = '' # accession of the longest record
-            self.id = '' # id of the longest record
-            self.accessions = [] # other accessions
-            self.ids = [] # other ids
-            self.contigs = 0 # count of records/contigs/plasmids
-            self.genome_size = 0 # sum of lengths of all records
-            self.total_genes_in_clusters = 0 # number of genes in all clusters
-            self.fnafile = '' # path to .fna file
-            self.as2file = '' # path to antismash2 file
-            self.is_annotated = False # antismash2 annotation
-            self.clusters = [] # list of (numeric) cluster IDs
-            self.faafile = ''
-            self.number2products = {} # numeric clusters to their products
-            self.coords2numbers = {} # coords of cluster to its number
-            self.cluster2genes = {} # cluster number to a list of locus_tags
-            self.gene2clusters = {} # gene ID to a list of cluster numbers
-            self.clustersizes = {} # cluster number to cluster size, bps
-            self.is_genecluster_parsed = False
-            # SeqIO record.
-            self.records = None
-            # Dict mapping locus_tag to (record_index, feature_index) in record.features.
-            self.CDS = None
-            # Dict mapping cluster_number to (record_index, feature_index) in record.features.
-            self.clusterindex = None
-            # These values are for the parent to check.
-            self.antismash2_reused = False
-            self.antismash_warning_shown = False
-            # Dict of per-cluster ordered lists of genes with strands
-            # for later collinearity analysis.
-            self.orderstrands = {}
+        '''
+        infile: path to the original GenBank file for this genome
+        project: path to the project directory, which has all the derivative files
+        '''
+        self.infile = infile
+        self.project = project
+        self.species = ''
+        self.accession = '' # accession of the longest record
+        self.id = '' # id of the longest record
+        self.accessions = [] # other accessions
+        self.ids = [] # other ids
+        self.contigs = 0 # count of records/contigs/plasmids
+        self.genome_size = 0 # sum of lengths of all records
+        self.total_genes_in_clusters = 0 # number of genes in all clusters
+        self.fnafile = '' # path to .fna file
+        self.as2file = '' # path to antismash2 file
+        self.is_annotated = False # antismash2 annotation
+        self.clusters = [] # list of (numeric) cluster IDs
+        self.faafile = ''
+        self.number2products = {} # numeric clusters to their products
+        self.coords2numbers = {} # coords of cluster to its number
+        self.cluster2genes = {} # cluster number to a list of locus_tags
+        self.gene2clusters = {} # gene ID to a list of cluster numbers
+        self.clustersizes = {} # cluster number to cluster size, bps
+        self.is_genecluster_parsed = False
+        # SeqIO record.
+        self.records = None
+        # Dict mapping locus_tag to (record_index, feature_index) in record.features.
+        self.CDS = None
+        # Dict mapping cluster_number to (record_index, feature_index) in record.features.
+        self.clusterindex = None
+        # These values are for the parent to check.
+        self.antismash2_reused = False
+        self.antismash_warning_shown = False
+        # Dict of per-cluster ordered lists of genes with strands
+        # for later collinearity analysis.
+        self.orderstrands = {}
 
-            primary_length = 0 # current primary accession sequence length
+        primary_length = 0 # current primary accession sequence length
 
-            for r in SeqIO.parse(infile, 'genbank', generic_dna):
-                # r.name is an accession (e.g. AF080235),
-                # r.id is a versioned accession (e.g. AF080235.1)
-                # We use r.id as more specific.
-                logging.debug('record name and ID are %s and %s', r.name, r.id)
-                if not r.id or r.id == '':
-                    logging.error('Genome %s has no usable ID!' % input)
-                    raise Exception('GenomeHasNoIDError')
-                self.contigs += 1
-                self.accessions.append(r.name)
-                self.ids.append(r.id)
-                self.species = r.annotations['organism']
-                if self.id == '':
-                    self.accession = r.name
-                    self.id = r.id
-                    primary_length = len(r.seq)
-                elif len(r.seq) > primary_length:
-                    self.accession = r.name
-                    self.id = r.id
-                    primary_length = len(r.seq)
-                self.genome_size += len(r.seq)
-            if '-' in self.id:
-                logging.error('quickparanoid allows no dashes in filenames; genome "%s" has a dash!',
-                              self.id)
-                raise Exception('DashesInIDsAreForbiddenError')
-            del primary_length, r
-            # Remove primary accession from the list of all accessions.
-            self.accessions.remove(self.accession)
-            self.ids.remove(self.id)
+        for r in SeqIO.parse(infile, 'genbank', generic_dna):
+            # r.name is an accession (e.g. AF080235),
+            # r.id is a versioned accession (e.g. AF080235.1)
+            # We use r.id as more specific.
+            logging.debug('record name and ID are %s and %s', r.name, r.id)
+            if not r.id or r.id == '':
+                logging.error('Genome %s has no usable ID!', input)
+                raise Exception('GenomeHasNoIDError')
+            self.contigs += 1
+            self.accessions.append(r.name)
+            self.ids.append(r.id)
+            self.species = r.annotations['organism']
+            if self.id == '':
+                self.accession = r.name
+                self.id = r.id
+                primary_length = len(r.seq)
+            elif len(r.seq) > primary_length:
+                self.accession = r.name
+                self.id = r.id
+                primary_length = len(r.seq)
+            self.genome_size += len(r.seq)
+        if '-' in self.id:
+            logging.error('quickparanoid allows no dashes in filenames; genome "%s" has a dash!',
+                          self.id)
+            raise Exception('DashesInIDsAreForbiddenError')
+        del primary_length
+        # Remove primary accession from the list of all accessions.
+        self.accessions.remove(self.accession)
+        self.ids.remove(self.id)
 
 
     def num_clusters(self):
