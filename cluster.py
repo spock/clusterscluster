@@ -561,6 +561,8 @@ def preprocess_input_files(inputs, args):
     '''
     inputs: dict[genome.id] = Genome, is populated by this function.
     args.paths: list of genbank files to process.
+    Read IDs and SeqRecords from GenBank files, make sure IDs are unique.
+    Write 'all_clusters.csv' file with 3 columns: genomeid_cluster, Genome_ID, cluster.
     '''
     # Process genome IDs.
     for infile in args.paths:
@@ -637,13 +639,25 @@ def preprocess_input_files(inputs, args):
     # First, empty 'inputs'; this preserves reference to the external 'inputs'.
     for k in inputs.keys():
         del inputs[k]
+    # Setup handle to a CSV file.
+    # TODO: show a warning if overwriting an existing file.
+    csvall = open(join(args.project, 'all_clusters.csv'), 'w')
+    writer = csv.writer(csvall, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    # Output header.
+    header = ['id', 'genome_ID', 'cluster']
+    writer.writerow(header)
     for _ in range(total_genomes):
         g = done_queue.get()
         if g != None:
             inputs[g.id] = g
+            # Output all clusters of this genome to the CSV file.
+            for cluster in g.clusters:
+                writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster])
         # Populate all_clusters.
         #for c in g.clusters:
         #    all_clusters.append(cluster(g.id, c))
+    # Close CSV.
+    csvall.close()
     # 6. Wait for processes to finish, close queues.
     logging.debug("Joining processes.")
     for p in workers_list:
@@ -1275,9 +1289,11 @@ def main():
         if g1 != g2 and not args.highmem:
             genomes[g2].unload()
         # Save caches.
+        # TODO: avoid saving if nothing changed.
         with open(ortho_file, 'w') as ortho_handle:
             pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
             #logging.debug('Dumped orthocache: %s', orthocache)
+        # TODO: avoid saving if nothing changed.
         with open(usearch_file, 'w') as usearch_handle:
             pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
         del genome1, genome2, cluster_pairs
@@ -1290,7 +1306,7 @@ def main():
     logging.debug('Joining processes.')
     for p in workers_list:
         p.join(timeout = 10)
-    del p, workers_list
+    del workers_list
     tasks.close()
     done.close()
 
