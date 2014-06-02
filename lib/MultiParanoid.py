@@ -34,6 +34,10 @@ class MultiParanoid(object):
         self.gene2ortho = defaultdict(list)
         # List of all the genes in the orthology cluster with given clusterID.
         self.ortho2genes = defaultdict(list)
+        # Dict mapping every gene to the set of all the other genes in the
+        # same orthology cluster:
+        # gene2genes[gene.genome][gene.id] = [other.gene1, other.gene2, ...]
+        self.gene2genes = defaultdict(lambda: defaultdict(set))
         self.parse()
 
     def get_species_list(self):
@@ -94,20 +98,38 @@ class MultiParanoid(object):
                     else:
                         # MultiParanoid
                         idname = 'clusterID'
-                    self.species.add(self.gene2species(row['gene']))
-                    # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
+                    self.species.add(gene2species(row['gene'])[1])
+                    # Skip some rows depending on arguments.
                     if self.no_tree_conflicts and row['tree_conflict'] != 'No':
                         continue
                     if self.no_name_conficts and row['tree_conflict'] == 'diff. names':
                         continue
+                    # Build gene-to-ortho-cluster-ID(s) dict. row['gene'] is the gene ID.
                     self.gene2ortho[row['gene']].append(row[idname])
                     # Build cluster-ID-to-all-genes dict of lists. row[idname] is the cluster number.
                     self.ortho2genes[row[idname]].append(row['gene'])
             except csv.Error as e:
                 logging.exception('file %s, line %d: %s', self.path, reader.line_num, e)
                 raise
+        logging.info('\tbuilding geneid-2-other-geneids dict...')
+        for cluster in self.ortho2genes.itervalues():
+            if len(cluster) < 2:
+                # Do not create self-self clusters.
+                logging.debug('skipping orthology cluster with 1 or 0 genes...')
+                continue
+            for gene in cluster:
+                geneid, species = gene2species(gene)
+                #logging.debug('gene2genes[%s] before adding: %s', species, self.gene2genes[species])
+                setwogene = set(cluster)
+                setwogene.remove(gene)
+                # Use 'union' operator - allows adding entire lists, and is possibly faster than add.
+                self.gene2genes[species][geneid] |= setwogene
+                #logging.debug('Added %s to %s/%s.', setwogene, species, geneid)
+                #logging.debug('gene2genes[%s] after adding: %s', species, self.gene2genes[species])
+                #raise Exception('Oughooch')
         logging.info('\ttotal lines read: %s', reader.line_num)
         logging.info('\ttotal species encountered: %s', len(self.species))
         logging.info('\tlist of these species: %s', ', '.join(self.species))
         logging.info('\ttotal entries in gene2ortho: %s', len(self.gene2ortho))
         logging.info('\ttotal entries in ortho2genes: %s', len(self.ortho2genes))
+        logging.info('\ttotal species in gene2genes: %s', len(self.gene2genes))

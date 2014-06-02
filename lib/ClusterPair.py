@@ -91,26 +91,25 @@ class ClusterPair(object):
         - return the list of those biosynthetic clusters, where
         - each is a Cluster(genome, number) named tuple.
         '''
-        if gene not in mp.gene2ortho:
-#            logging.debug('Gene %s is NOT in mp.gene2ortho.', gene)
+        geneid, species = gene2species(gene)
+        if geneid not in mp.gene2genes[species]:
+            #logging.debug('Gene %s is NOT in mp.gene2genes[%s].', geneid, species)
+            #logging.debug(mp.gene2genes[species])
+            #raise Exception('mp.gene2genes.isNotPopulatedProperlyError')
             return [] # `gene` does not belong to any group of orthologs
-#        logging.debug('Gene %s is in mp.gene2ortho.', gene)
+        #logging.debug('Gene %s is IN mp.gene2genes.', gene)
         bioclusters = []
-        # FIXME: collapse calls to gene2ortho and ortho2genes into gene2genes:
-        # gene2genes[gene.genome][gene.id] = [other.gene1, other.gene2, ...]
-        # TODO: maybe store gene names not as genome:gene, but as (genome, gene)?
-        for orthoclust in mp.gene2ortho[gene]:
-#            logging.debug('gene %s belongs to ortho-cluster %s', gene, orthoclust)
-            for xeno_gene in mp.ortho2genes[orthoclust]:
-                # Extract LOCUS from gene name, find species from it.
-                xeno_species = xeno_gene.rsplit(':')[-1]
-                # Check if xeno_gene belongs to any biosynthetic clusters.
-                xeno_gene2clusters = genomes[xeno_species].gene2clusters
-                if xeno_gene in xeno_gene2clusters:
-                    for clnum in xeno_gene2clusters[xeno_gene]:
-                        xeno_cluster = Cluster(xeno_species, clnum)
-                        bioclusters.append(xeno_cluster)
-#                        logging.debug('\txeno_gene %s belongs to %s', xeno_gene, xeno_cluster)
+        for xeno_gene in mp.gene2genes[species][geneid]:
+            # Extract LOCUS from gene name, find species from it.
+            xeno_species = gene2species(xeno_gene)[1]
+            # Check if xeno_gene belongs to any biosynthetic clusters.
+            xeno_gene2clusters = genomes[xeno_species].gene2clusters
+            if xeno_gene in xeno_gene2clusters:
+                for clnum in xeno_gene2clusters[xeno_gene]:
+                    xeno_cluster = Cluster(xeno_species, clnum)
+                    # FIXME: return 1 as soon as cluster 2 (self.gc2) is found; otherwise, return 0
+                    bioclusters.append(xeno_cluster)
+                    #logging.debug('\txeno_gene %s belongs to %s', xeno_gene, xeno_cluster)
         return bioclusters
 
 
