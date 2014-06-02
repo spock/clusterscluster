@@ -9,14 +9,16 @@ from multiprocessing import cpu_count
 from bx.intervals.intersection import Interval, IntervalTree
 from collections import namedtuple
 # FIXME: this fails when profiling: from lib import utils
+#from lib.utils import execute
+from lib import utils
 from lib.gb2fasta import gb2fasta
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
+from lib.ClusterPair import GeneOrder
 # Extension trimming is implemented as --no-extensions in antismash2,
 # making this import obsolete.
 from lib import hmm_detection
 
-# geneid is locus_tag:genome_id
-GeneOrder = namedtuple('GeneOrder', ['start', 'strand', 'geneid'])
+
 FeatureTuple = namedtuple('FeatureTuple', ['feature', 'record_index', 'feature_index'])
 
 

@@ -4,10 +4,11 @@ import itertools
 from scipy import stats
 from tempfile import NamedTemporaryFile
 from collections import namedtuple
-from lib.Genome import GeneOrder
 from lib.MultiParanoid import gene2species
 
 
+# geneid is locus_tag:genome_id
+GeneOrder = namedtuple('GeneOrder', ['start', 'strand', 'geneid'])
 Cluster = namedtuple('Cluster', ['genome', 'number'])
 GP = namedtuple('GenePair', ['identity', 'g1', 'g2'])
 Avg_Identity = namedtuple('Avg_Identity', ['num_gene_pairs', 'avg_identity'])
