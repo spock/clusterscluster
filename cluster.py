@@ -644,7 +644,7 @@ def preprocess_input_files(inputs, args):
     csvall = open(join(args.project, 'all_clusters.csv'), 'w')
     writer = csv.writer(csvall, delimiter = '\t', quoting = csv.QUOTE_NONE)
     # Output header.
-    header = ['id', 'genome_ID', 'cluster']
+    header = ['id', 'genome_ID', 'cluster', 'type']
     writer.writerow(header)
     for _ in range(total_genomes):
         g = done_queue.get()
@@ -652,7 +652,7 @@ def preprocess_input_files(inputs, args):
             inputs[g.id] = g
             # Output all clusters of this genome to the CSV file.
             for cluster in g.clusters:
-                writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster])
+                writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster, g.number2products[cluster]])
         # Populate all_clusters.
         #for c in g.clusters:
         #    all_clusters.append(cluster(g.id, c))
