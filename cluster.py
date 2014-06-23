@@ -1198,17 +1198,23 @@ def main():
         pair_id = '_'.join([g1, str(genome1.total_genes_in_clusters),
                             g2, str(genome2.total_genes_in_clusters)])
         ortho_file = join(ortholinks, pair_id)
+        # Flag, if True - write cache back to the file.
+        orthocache_updated = False
         if exists(ortho_file):
             with open(ortho_file) as ortho_handle:
                 orthocache = pickle.load(ortho_handle)
         else:
             orthocache = {}
+            orthocache_updated = True
         usearch_file = join(usearch, pair_id)
+        # Similar flag for the usearch cache.
+        usearchcache_updated = False
         if exists(usearch_file):
             with open(usearch_file) as usearch_handle:
                 usearchcache = pickle.load(usearch_handle)
         else:
             usearchcache = {}
+            usearchcache_updated = True
         del pair_id
 
         # Iterate all possible cluster pairs between these 2 genomes, generate cluster pairs.
@@ -1234,6 +1240,7 @@ def main():
                 else:
                     cp.assign_orthologous_link(mp, genomes, args)
                     orthocache[CPid] = (cp.link1, cp.link2)
+                    usearchcache_updated = True
             if args.skip_orthology or cp.link1 > 0 or cp.link2 > 0:
                 # Check cache.
                 if CPid in usearchcache:
@@ -1244,6 +1251,7 @@ def main():
                     seqfilename = cp.pre_CDS_identities(genome1, genome2)
                     tasks.put((CPid, seqfilename))
                     logging.debug('Submitted %s with %s.', CPid, seqfilename)
+                    orthocache_updated = True
                 # Save the cp object for re-use.
                 cluster_pairs[CPid] = cp
         submitted_tasks += len(cluster_pairs)
@@ -1289,13 +1297,13 @@ def main():
         if g1 != g2 and not args.highmem:
             genomes[g2].unload()
         # Save caches.
-        # TODO: avoid saving if nothing changed.
-        with open(ortho_file, 'w') as ortho_handle:
-            pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
-            #logging.debug('Dumped orthocache: %s', orthocache)
-        # TODO: avoid saving if nothing changed.
-        with open(usearch_file, 'w') as usearch_handle:
-            pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
+        if orthocache_updated:
+            with open(ortho_file, 'w') as ortho_handle:
+                pickle.dump(orthocache, ortho_handle, pickle.HIGHEST_PROTOCOL)
+                #logging.debug('Dumped orthocache: %s', orthocache)
+        if usearchcache_updated:
+            with open(usearch_file, 'w') as usearch_handle:
+                pickle.dump(usearchcache, usearch_handle, pickle.HIGHEST_PROTOCOL)
         del genome1, genome2, cluster_pairs
 
     # 5. Add STOP messages.
