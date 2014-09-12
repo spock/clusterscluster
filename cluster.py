@@ -577,14 +577,15 @@ def preprocess_input_files(inputs, args):
                               g.species, g.id, g.genome_size, g.contigs)
                 raise Exception('IdenticalGenomesError')
             else:
-                logging.debug('Append _1, _2 etc to the ID until it becomes unique.')
-                for i in range(1, 10):
-                    new_id = g.id + '_' + str(i)
+                for i in range(1, 999):
+                    new_id = g.id + '_' + str(i) # TODO: zero-padded would look better
+                    logging.debug('Appending %s to %s to make it unique: %s.', i, g.id, new_id)
                     if new_id in inputs:
                         continue
                     else:
                         g.id = new_id
                         del new_id
+                        break
         inputs[g.id] = g
 
     total_genomes = len(inputs)
