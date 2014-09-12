@@ -1,11 +1,13 @@
 # this is a heavily simplified short segment from antismash2/antismash/generic_modules/hmm_detection/__init__.py
 
+import os
 
 def create_rules_dict():
     "Create a cluster rules dictionary from the cluster rules file"
     rulesdict = {}
     first = True
-    for line in open("cluster_rules.txt", "r"):
+    cluster_rules = os.path.join(os.path.dirname(__file__), 'cluster_rules.txt')
+    for line in open(cluster_rules, 'r'):
         # skip the first line with the legend
         if first:
             first = False

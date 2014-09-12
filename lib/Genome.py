@@ -182,7 +182,8 @@ class Genome(object):
         maps and lists (such as GeneOrder/Strand lists).
         args: original arguments namespace from parent/main (args.trim etc)
         '''
-        rulesdict = hmm_detection.create_rules_dict()
+        if args.trim:
+            rulesdict = hmm_detection.create_rules_dict()
         logging.info('Parsing antismash2 genbank file %s.', self.as2file)
 
         # Dict of per-SeqRecord Interval trees of clusters, i.e.
