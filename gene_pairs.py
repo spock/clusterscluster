@@ -30,7 +30,7 @@ def is_regulator(f):
     return True if it is a regulator/repressor,
     False otherwise
     '''
-    for substring in ('regulator', 'repressor', 'transcription'):
+    for substring in ('regulat', 'repressor', 'transcription'):
         if 'product' in f.qualifiers and substring in f.qualifiers['product'][0].lower():
             return True
         if 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
@@ -48,7 +48,7 @@ def is_transporter(f):
     return True if it is a transporter,
     False otherwise
     '''
-    for substring in ('transport', 'abc', 'pump', 'transmembrane', 'trans-membrane'):
+    for substring in ('transport', 'abc', 'pump', 'transmembrane', 'trans-membrane', 'facilitator', 'MFS'):
         if 'product' in f.qualifiers and substring in f.qualifiers['product'][0].lower():
             return True
         if 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
