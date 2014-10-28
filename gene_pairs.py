@@ -32,7 +32,7 @@ def is_regulator(f):
     for substring in ('regulator', 'repressor', 'transcription'):
         if 'product' in f.qualifiers and substring in f.qualifiers['product'][0].lower():
             return True
-        elif 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
+        if 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
             return True
         if 'note' in f.qualifiers:
             for note in f.qualifiers['note']:
@@ -41,14 +41,56 @@ def is_regulator(f):
     return False
 
 
-def has_transporter_nearby(g, regulator):
+def is_transporter(f):
+    '''
+    given feature 'f',
+    return True if it is a transporter,
+    False otherwise
+    '''
+    for substring in ('transport', 'abc', 'pump', 'transmembrane', 'trans-membrane'):
+        if 'product' in f.qualifiers and substring in f.qualifiers['product'][0].lower():
+            return True
+        if 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
+            return True
+        if 'note' in f.qualifiers:
+            for note in f.qualifiers['note']:
+                if substring in note:
+                    return True
+    return False
+
+
+def has_transporter_nearby(g, regulator, cluster_number):
     '''
     g: Genome object;
     f: feature (regulator/repressor)
     search for a transporter up- or down-stream from 'f', AND
-    on the other strand
+    on the other strand; return either None, or the found feature
     '''
-    
+    # find the index of 'regulator' in orderstrands
+    index_found = False # safeguard variable
+    for regulator_index, current in g.orderstrands[cluster_number].iteritems():
+        # 'current' is a GeneOrder named tuple,
+        # with .start, .strand, and .geneid = locus_tag:genome_id
+        if current.start == regulator.location.start.position and current.strand == regulator.strand:
+            # yes, this is our CDS!
+            index_found = True
+            break
+    assert index_found
+    # Examine previous index.
+    if regulator_index > 0:
+        geneid = g.orderstrands[cluster_number][regulator_index - 1].geneid
+        locus_tag = geneid.split(':')[0]
+        prev = g.get_feature_by_locustag(locus_tag).feature
+        if prev.strand != regulator.strand and is_transporter(prev):
+            return prev
+    # Examine next index.
+    # TODO: almost identical to the code above, need to refactor.
+    if regulator_index < len(g.orderstrands[cluster_number]):
+        geneid = g.orderstrands[cluster_number][regulator_index + 1].geneid
+        locus_tag = geneid.split(':')[0]
+        next_feature = g.get_feature_by_locustag(locus_tag).feature
+        if next_feature.strand != regulator.strand and is_transporter(next_feature):
+            return next_feature
 
 
 def main():
@@ -144,25 +186,37 @@ def main():
         # iterate all clusters
         for cluster in g.clusters:
             # iterate all the CDS of a cluster
-            for CDS in g.cluster2genes[cluster].iteritems():
+            for CDS in g.cluster2genes[cluster].itervalues():
                 total_genes_in_clusters += 1
                 # select proper record/contig and proper feature by index <- by locus_tag
                 (record_index, feature_index) = g.CDS[CDS]
                 regulator = g.records[ record_index ].features[ feature_index ]
                 if is_regulator(regulator):
-                    # check if there is a transporter nearby;
-                    if has_transporter_nearby(g, regulator):
+                    # check if there is a transporter nearby
+                    transporter = has_transporter_nearby(g, regulator, cluster)
+                    if transporter is not None:
                         gene_pairs += 1
-                        write data to file
+                        (c_record_index, c_feature_index) = g.clusterindex[cluster]
+                        cluster_feature = g.records[c_record_index][c_feature_index]
+                        row = [infile, g.id, g.species, cluster,
+                               g.number2products[cluster],
+                               cluster_feature.location.start.position,
+                               cluster_feature.location.end.position,
+                               regulator.qualifiers['product'][0],
+                               regulator.location.start.position,
+                               regulator.location.end.position,
+                               transporter.qualifiers['product'][0],
+                               transporter.location.start.position,
+                               transporter.location.end.position]
+                        writer.writerow(row)
         # clear RAM
         g.unload()
         # this might be unnecessary?..
         inputs[g.id] = g
 
-
-        writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster, g.number2products[cluster]])
-
     csv.close()
+    print('Total genes in clusters:', total_genes_in_clusters)
+    print('Gene pairs found:', gene_pairs)
 
 if __name__ == "__main__":
     sys.exit(main())
