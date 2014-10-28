@@ -1,10 +1,10 @@
+#!/usr/bin/python
 '''
 Given a bunch of GenBank files annotated with antismash,
 find all paired occurrences of a regulator and a transporter
-pointing in different directions (i.e. <-regulator| |transporter-> or
-<-transporter| |regulator->)
-
-Lots of code borrowed from csuter.py, could probably be reorganized
+pointing in different directions (i.e. <-regulator| |transporter->
+or <-transporter| |regulator->)
+Lots of code borrowed from cluster.py, could probably be reorganized
 into a library.
 '''
 
@@ -12,7 +12,8 @@ into a library.
 from __future__ import print_function
 import sys
 import logging
-from os.path import exists#, join, dirname, realpath, basename
+import csv
+from os.path import exists, basename#, join, dirname, realpath
 from argparse import ArgumentParser
 
 from lib.Genome import Genome
@@ -68,7 +69,7 @@ def has_transporter_nearby(g, regulator, cluster_number):
     '''
     # find the index of 'regulator' in orderstrands
     index_found = False # safeguard variable
-    for regulator_index, current in g.orderstrands[cluster_number].iteritems():
+    for regulator_index, current in enumerate(g.orderstrands[cluster_number]):
         # 'current' is a GeneOrder named tuple,
         # with .start, .strand, and .geneid = locus_tag:genome_id
         if current.start == regulator.location.start.position and current.strand == regulator.strand:
@@ -77,7 +78,7 @@ def has_transporter_nearby(g, regulator, cluster_number):
             break
     assert index_found
     # Examine previous index.
-    if regulator_index > 0:
+    if regulator_index > 0: # so that after -1 it will still be a valid index
         geneid = g.orderstrands[cluster_number][regulator_index - 1].geneid
         locus_tag = geneid.split(':')[0]
         prev = g.get_feature_by_locustag(locus_tag).feature
@@ -85,7 +86,7 @@ def has_transporter_nearby(g, regulator, cluster_number):
             return prev
     # Examine next index.
     # TODO: almost identical to the code above, need to refactor.
-    if regulator_index < len(g.orderstrands[cluster_number]):
+    if regulator_index + 1 < len(g.orderstrands[cluster_number]): # so that after +1 it will still be in range
         geneid = g.orderstrands[cluster_number][regulator_index + 1].geneid
         locus_tag = geneid.split(':')[0]
         next_feature = g.get_feature_by_locustag(locus_tag).feature
@@ -150,17 +151,18 @@ def main():
     gene_pairs = 0
 
     # prepare CSV for output
-    csv = open(args.prefix + '_gene_pairs.csv', 'w')
-    writer = csv.writer(csv, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    csvout = open(args.prefix + '_gene_pairs.csv', 'w')
+    writer = csv.writer(csvout, delimiter = '\t', quoting = csv.QUOTE_NONE)
     # Output header.
-    header = ['filename', 'genomeID', 'species', 'cluster_number',
-              'cluster_type', 'cluster_start', 'cluster_end', 'regulator',
-              'reg_start', 'reg_end', 'transporter', 'trans_start', 'trans_end']
+    header = ['filename', 'genomeID', 'species',
+              'cluster_number', 'cluster_type', 'cluster_start', 'cluster_end',
+              'regulator', 'regulator_start', 'regulator_end', 'regulator_strand',
+              'transporter', 'transporter_start', 'transporter_end', 'transporter_strand']
     writer.writerow(header)
 
     # Catalog all genomes.
     for infile in args.paths:
-        g = Genome(infile, '.')
+        g = Genome(infile, '.', assume_infile_after_as2 = True)
         # Check for duplicate ID.
         if g.id in inputs:
             # Check for an exact duplicate.
@@ -186,35 +188,45 @@ def main():
         # iterate all clusters
         for cluster in g.clusters:
             # iterate all the CDS of a cluster
-            for CDS in g.cluster2genes[cluster].itervalues():
+            for CDS in g.cluster2genes[cluster]:
                 total_genes_in_clusters += 1
                 # select proper record/contig and proper feature by index <- by locus_tag
-                (record_index, feature_index) = g.CDS[CDS]
+                (record_index, feature_index) = g.CDS[CDS.split(':')[0]]
                 regulator = g.records[ record_index ].features[ feature_index ]
                 if is_regulator(regulator):
+                    print('"%s" is a regulator...' % regulator.qualifiers['product'][0])
                     # check if there is a transporter nearby
                     transporter = has_transporter_nearby(g, regulator, cluster)
                     if transporter is not None:
+                        print('--> Found transporter! "%s" and "%s"!' % (regulator.qualifiers['product'][0],
+                                                                         transporter.qualifiers['product'][0]))
                         gene_pairs += 1
                         (c_record_index, c_feature_index) = g.clusterindex[cluster]
-                        cluster_feature = g.records[c_record_index][c_feature_index]
-                        row = [infile, g.id, g.species, cluster,
+                        cluster_feature = g.records[c_record_index].features[c_feature_index]
+                        row = [basename(infile),
+                               g.id,
+                               g.species,
+                               cluster,
                                g.number2products[cluster],
                                cluster_feature.location.start.position,
                                cluster_feature.location.end.position,
                                regulator.qualifiers['product'][0],
                                regulator.location.start.position,
                                regulator.location.end.position,
+                               regulator.strand,
                                transporter.qualifiers['product'][0],
                                transporter.location.start.position,
-                               transporter.location.end.position]
+                               transporter.location.end.position,
+                               transporter.strand]
                         writer.writerow(row)
+                    else:
+                        print('\t... which has no transporter nearby.')
         # clear RAM
         g.unload()
         # this might be unnecessary?..
         inputs[g.id] = g
 
-    csv.close()
+    csvout.close()
     print('Total genes in clusters:', total_genes_in_clusters)
     print('Gene pairs found:', gene_pairs)
 
