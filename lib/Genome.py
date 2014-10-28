@@ -29,13 +29,15 @@ class Genome(object):
     Contains gene-cluster-product-coordinate mappings.
     '''
 
-    def __init__(self, infile, project):
+    def __init__(self, infile, project, assume_infile_after_as2 = False):
         '''
         infile: path to the original GenBank file for this genome
         project: path to the project directory, which has all the derivative files
+        assume_infile_after_as2: infile GenBank already has antismash2 cluster annotations
         '''
         self.infile = infile
         self.project = project
+        self.assume_infile_after_as2 = assume_infile_after_as2
         self.species = ''
         self.accession = '' # accession of the longest record
         self.id = '' # id of the longest record
@@ -45,7 +47,10 @@ class Genome(object):
         self.genome_size = 0 # sum of lengths of all records
         self.total_genes_in_clusters = 0 # number of genes in all clusters
         self.fnafile = '' # path to .fna file
-        self.as2file = '' # path to antismash2 file
+        if self.assume_infile_after_as2 is True:
+            self.as2file = infile # path to antismash2 file
+        else:
+            self.as2file = '' # path to antismash2 file
         self.is_annotated = False # antismash2 annotation
         self.clusters = [] # list of (numeric) cluster IDs
         self.faafile = ''
@@ -125,7 +130,12 @@ class Genome(object):
         force: will re-use existing antismash2 annotation
         antismash_warning_shown: flag, whether antismash2 re-use warning had already been shown
         no_extensions: run antismash with --no-extensions
+        if self.assume_infile_after_as2 is True, then this method will simply return
         '''
+        if self.assume_infile_after_as2 is True:
+            logging.warning('Genome %s initialized with assume_infile_after_as2, *NOT* running antismash2!', self.id)
+            assert self.as2file == self.infile
+            return
         # Re-use antismash2 annotation if it exists.
         self.as2file = join(self.project, self.id + '.gbk')
         self.antismash2_reused = False
@@ -182,7 +192,7 @@ class Genome(object):
         maps and lists (such as GeneOrder/Strand lists).
         args: original arguments namespace from parent/main (args.trim etc)
         '''
-        if args.trim:
+        if 'trim' in args and args.trim:
             rulesdict = hmm_detection.create_rules_dict()
         logging.info('Parsing antismash2 genbank file %s.', self.as2file)
 
@@ -192,7 +202,7 @@ class Genome(object):
         self.load()
         print('Parsing clusters and assigning genes to them in %s (%s):' %
               (self.id, self.species))
-        if args.trim:
+        if 'trim' in args and args.trim:
             logging.info('\tgetting extension sizes for diff. cluster types from antismash2 config')
             logging.info('\tNote: cluster coordinates are shown after trimming, except for skipped putative clusters.')
         # Populate clusters tree and dict with (start, end) as keys.
@@ -203,12 +213,12 @@ class Genome(object):
                     cluster_number = self.parse_cluster_number(f.qualifiers['note'])
                     start = int(f.location.start.position)
                     end = int(f.location.end.position)
-                    if args.skipp and f.qualifiers['product'][0] == 'putative':
+                    if 'skipp' in args and args.skipp and f.qualifiers['product'][0] == 'putative':
                         logging.debug('\tskipping putative cluster #%s at (%s, %s)',
                                       cluster_number, start, end)
                         continue
                     # Putative clusters have neither extensions nor rules for them.
-                    if args.trim and f.qualifiers['product'][0] != 'putative':
+                    if 'trim' in args and args.trim and f.qualifiers['product'][0] != 'putative':
                         # Use cluster type to get extension size, including composite types.
                         extension = hmm_detection.get_extension_size_by_cluster_type(f.qualifiers['product'][0],
                                                                                      rulesdict)
