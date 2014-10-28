@@ -8,15 +8,48 @@ Lots of code borrowed from csuter.py, could probably be reorganized
 into a library.
 '''
 
+
 from __future__ import print_function
 import sys
 import logging
 from os.path import exists#, join, dirname, realpath, basename
 from argparse import ArgumentParser
 
+from lib.Genome import Genome
+
+
 __version__ = 0.1
 __date__ = '2014-10-28'
 __updated__ = '2014-10-28'
+
+
+def is_regulator(f):
+    '''
+    given feature 'f',
+    return True if it is a regulator/repressor,
+    False otherwise
+    '''
+    for substring in ('regulator', 'repressor', 'transcription'):
+        if 'product' in f.qualifiers and substring in f.qualifiers['product'][0].lower():
+            return True
+        elif 'label' in f.qualifiers and substring in f.qualifiers['label'][0].lower():
+            return True
+        if 'note' in f.qualifiers:
+            for note in f.qualifiers['note']:
+                if substring in note:
+                    return True
+    return False
+
+
+def has_transporter_nearby(g, regulator):
+    '''
+    g: Genome object;
+    f: feature (regulator/repressor)
+    search for a transporter up- or down-stream from 'f', AND
+    on the other strand
+    '''
+    
+
 
 def main():
     '''Command line options.'''
@@ -65,8 +98,27 @@ def main():
         sys.exit(4)
     logging.info("Will process %s input files.", len(args.paths))
 
+    # Map genome IDs to Genome objects.
+    inputs = dict()
+    # make loaded genbanks stay in RAM until explicitly unloaded
+    args.highmem = True
+
+    # counters
+    total_genes_in_clusters = 0
+    gene_pairs = 0
+
+    # prepare CSV for output
+    csv = open(args.prefix + '_gene_pairs.csv', 'w')
+    writer = csv.writer(csv, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    # Output header.
+    header = ['filename', 'genomeID', 'species', 'cluster_number',
+              'cluster_type', 'cluster_start', 'cluster_end', 'regulator',
+              'reg_start', 'reg_end', 'transporter', 'trans_start', 'trans_end']
+    writer.writerow(header)
+
+    # Catalog all genomes.
     for infile in args.paths:
-        g = Genome(infile, args.project)
+        g = Genome(infile, '.')
         # Check for duplicate ID.
         if g.id in inputs:
             # Check for an exact duplicate.
@@ -86,25 +138,31 @@ def main():
                         g.id = new_id
                         del new_id
                         break
+        # perform actual processing
+        g.load()
+        g.parse_gene_cluster_relations(args)
+        # iterate all clusters
+        for cluster in g.clusters:
+            # iterate all the CDS of a cluster
+            for CDS in g.cluster2genes[cluster].iteritems():
+                total_genes_in_clusters += 1
+                # select proper record/contig and proper feature by index <- by locus_tag
+                (record_index, feature_index) = g.CDS[CDS]
+                regulator = g.records[ record_index ].features[ feature_index ]
+                if is_regulator(regulator):
+                    # check if there is a transporter nearby;
+                    if has_transporter_nearby(g, regulator):
+                        gene_pairs += 1
+                        write data to file
+        # clear RAM
+        g.unload()
+        # this might be unnecessary?..
         inputs[g.id] = g
 
-    csvall = open(join(args.project, 'all_clusters.csv'), 'w')
-    writer = csv.writer(csvall, delimiter = '\t', quoting = csv.QUOTE_NONE)
-    # Output header.
-    header = ['id', 'genome_ID', 'cluster', 'type']
-    writer.writerow(header)
-    for _ in range(total_genomes):
-        g = done_queue.get()
-        if g != None:
-            inputs[g.id] = g
-            # Output all clusters of this genome to the CSV file.
-            for cluster in g.clusters:
-                writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster, g.number2products[cluster]])
-        # Populate all_clusters.
-        #for c in g.clusters:
-        #    all_clusters.append(cluster(g.id, c))
-    # Close CSV.
-    csvall.close()
+
+        writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster, g.number2products[cluster]])
+
+    csv.close()
 
 if __name__ == "__main__":
     sys.exit(main())
