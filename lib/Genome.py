@@ -210,6 +210,14 @@ class Genome(object):
             clustertrees[record_number] = IntervalTree()
             for f in r.features:
                 if f.type == 'cluster':
+                    if 'note' not in f.qualifiers:
+                        # TODO: there is an identical code segment at line ~358; convert into a test function.
+                        logging.error('Cluster (%s, %s) has no number note (in %s from %s)!',
+                                      f.location.start.position,
+                                      f.location.end.position,
+                                      self.id, self.as2file)
+                        logging.error('It was probably hand-annotated, and will be skipped!')
+                        continue
                     cluster_number = self.parse_cluster_number(f.qualifiers['note'])
                     start = int(f.location.start.position)
                     end = int(f.location.end.position)
@@ -353,6 +361,13 @@ class Genome(object):
             for (index, feature) in enumerate(record.features):
                 # ugly but functional, special handling for clusters
                 if feature.type == 'cluster' and feature_type == 'cluster':
+                    if qualifier not in feature.qualifiers:
+                        logging.error('Cluster (%s, %s) has no number note (in %s from %s)!',
+                                      feature.location.start.position,
+                                      feature.location.end.position,
+                                      self.id, self.as2file)
+                        logging.error('It was probably hand-annotated, and will be skipped!')
+                        continue
                     value = self.parse_cluster_number(feature.qualifiers[qualifier])
                     answer[value] = (record_index, index)
                 elif feature.type == feature_type:
