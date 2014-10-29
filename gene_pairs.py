@@ -65,7 +65,33 @@ def has_transporter_nearby(g, regulator, cluster_number):
     g: Genome object;
     f: feature (regulator/repressor)
     search for a transporter up- or down-stream from 'f', AND
-    on the other strand; return either None, or the found feature
+    on the other strand, AND necessarily having start codons closer than stop codons;
+    return either None (if no satisfying transporter is found), or the found transporter feature.
+
+    The best and the simplest rule to only select outwards-facing pairs,
+    including marginal cases where both annotations may 5'-overlap and thus have wrong order,
+    was defined as follows:
+    - if Regulator is on the +1 strand (pointing to the right),
+      then Regulator.end must be > Transporter.end
+    - if Regulator is on the -1 strand (pointing to the left),
+      then Regulator.start must be < Transporter.end
+
+    Because of the possible (and erroneous) 5'-overlap, both up- and down-stream of
+    Regulator features must be examined. If annotation were perfect, it would suffice
+    to only check upstream features for the +1 strand Regulator, and only downstream
+    features for the -1 strand Regulator.
+
+    Note that both in GenBank and in BioPython features *always* have their start < end.
+
+    Schematics of all 4 possible R-T arrangements, plus 2 erroneous overlap cases:
+    |Regulator-> <-Transporter|    wrong orientation; R+, but R.end < T.end
+    <-Transporter| |Regulator->    correct orientation; R+, and R.end > T.end
+    <-Regulator| |Transporter->    correct orientation; R-, and R.start < T.start
+    |Transporter-> <-Regulator|    wrong orientation; R-, but R.start > T.start
+    <-Transporter|                 correct orientation, with 5'-overlap;
+               |Regulator->        R+, and R.end > T.end
+    <-Regulator|                   correct orientation, with 5'-overlap;
+             |Transporter->        R-, and R.start < T.start
     '''
     # find the index of 'regulator' in orderstrands
     index_found = False # safeguard variable
@@ -76,13 +102,19 @@ def has_transporter_nearby(g, regulator, cluster_number):
             # yes, this is our CDS!
             index_found = True
             break
-    assert index_found
+    assert index_found is True
     # Examine previous index.
     if regulator_index > 0: # so that after -1 it will still be a valid index
         geneid = g.orderstrands[cluster_number][regulator_index - 1].geneid
         locus_tag = geneid.split(':')[0]
         prev = g.get_feature_by_locustag(locus_tag).feature
-        if prev.strand != regulator.strand and is_transporter(prev):
+        if (prev.strand != regulator.strand
+            and is_transporter(prev)
+            and ( (regulator.strand > 0 and regulator.location.end.position > prev.location.end.position)
+                  or
+                  (regulator.strand < 0 and regulator.location.start.position < prev.location.start.position)
+                )
+           ):
             return prev
     # Examine next index.
     # TODO: almost identical to the code above, need to refactor.
@@ -90,7 +122,13 @@ def has_transporter_nearby(g, regulator, cluster_number):
         geneid = g.orderstrands[cluster_number][regulator_index + 1].geneid
         locus_tag = geneid.split(':')[0]
         next_feature = g.get_feature_by_locustag(locus_tag).feature
-        if next_feature.strand != regulator.strand and is_transporter(next_feature):
+        if (next_feature.strand != regulator.strand
+            and is_transporter(next_feature)
+            and ( (regulator.strand > 0 and regulator.location.end.position > next_feature.location.end.position)
+                  or
+                  (regulator.strand < 0 and regulator.location.start.position < next_feature.location.start.position)
+                )
+           ):
             return next_feature
 
 
@@ -182,8 +220,7 @@ def main():
                         g.id = new_id
                         del new_id
                         break
-        # perform actual processing
-        g.load()
+        # perform actual processing; parse_gene_cluster_relations() invokes load(), so no need to call that separately
         g.parse_gene_cluster_relations(args)
         # iterate all clusters
         for cluster in g.clusters:
@@ -197,7 +234,9 @@ def main():
                     print('"%s" is a regulator...' % regulator.qualifiers['product'][0])
                     # check if there is a transporter nearby
                     transporter = has_transporter_nearby(g, regulator, cluster)
+                    # assert regulator.location.start.position < regulator.location.end.position
                     if transporter is not None:
+                        # assert transporter.location.start.position < transporter.location.end.position
                         print('--> Found transporter! "%s" and "%s"!' % (regulator.qualifiers['product'][0],
                                                                          transporter.qualifiers['product'][0]))
                         gene_pairs += 1
