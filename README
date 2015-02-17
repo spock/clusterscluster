@@ -32,6 +32,7 @@ Modifying antismash2
 --------------------
 cluster.py can use a version of antismash which avoids extending clusters using
 the rules in cluster_rules.txt. Here's how you can add --no-extensions option to antismash2:
+
 - install antismash2 from git to a location you can write to, add run_antismash
   to PATH;
 - apply the supplied 0001-added-support-for-no-extensions-option.patch using
@@ -42,9 +43,9 @@ the rules in cluster_rules.txt. Here's how you can add --no-extensions option to
 Dependencies
 ------------
 It should be possible to implement --skip-antismash and feed already-processed genomes into cluster.py.
-Otherwise, antismash2 is required.
+Otherwise, antismash2 is required.  
 SciPy.stats dependency is used for gene order correlation calculations.
-This dependency can be removed as soon as an alternative (more sensitive) gene synteny method is implemented.
+This dependency can be removed as soon as an alternative (more sensitive) gene synteny method is implemented.  
 InParanoid and QuickParanoid are only necessary if you intend using genome-wide orthology calculations
 to estimate the number of orthologous links between clusters. Use --skip-orthology to skip both.
 
