@@ -16,7 +16,7 @@ Dependencies
 * Python 2.7+
     * SciPy
 * antismash2 (possibly but not necessarily patched, see below)
-* usearch
+* usearch from http://www.drive5.com/usearch/
 * InParanoid 4.1 from http://software.sbc.su.se/cgi-bin/request.cgi?project=inparanoid :
     * free for private study, education or nonprofit research only
     * Perl
@@ -117,6 +117,11 @@ optional arguments:
   --from-file FROM_FILE
                         read paths to GenBank files (one per line) from the
                         provided file
+
+License
+=======
+This software is currently available under the GNU Affero General Public License Version 3 (AGPL-3.0).  
+Other (commercial, exclusive) licenses are possible, please contact Bogdan Tokovenko for details.
 
 TODO list
 =========
