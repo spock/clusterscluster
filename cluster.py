@@ -65,6 +65,7 @@ __date__ = '2013-07-10'
 __updated__ = '2014-05-11'
 
 
+# FIXME: obsolete
 def print_cluster_numbers_row(s2c, species, tee):
     '''
     Print a row of tab-separated cluster numbers.
@@ -83,6 +84,7 @@ def print_cluster_numbers_row(s2c, species, tee):
     tee.write('\n')
 
 
+# FIXME: obsolete
 def print_species_header(species, tee):
     '''
     Print table header: a row of tab-separated genome identifiers
@@ -99,6 +101,7 @@ def print_species_header(species, tee):
     tee.write('\n')
 
 
+# FIXME: obsolete
 def bin_key(weight):
     'for a given weight, return appropriate weight_bin key'
     if weight <= 0.05: return 0.05
@@ -126,7 +129,7 @@ def bin_key(weight):
 # Set of functions used by process()
 #
 
-
+# FIXME: obsolete
 def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
                      numbers2products, mp, gene2clusters, args, inputs):
     '''
@@ -209,6 +212,7 @@ def calculate_weight(c1, c2, cluster2genes, clustersizes, intra_one, inter_one,
     return weight
 
 
+# FIXME: obsolete
 def get_unique_clusters(s, cluster2genes, weights_clean, allowed_species = False):
     '''
     Return the quantity of unique clusters in the provided species "s".
@@ -230,6 +234,7 @@ def get_unique_clusters(s, cluster2genes, weights_clean, allowed_species = False
     return len(cluster2genes[s]) - non_unique
 
 
+# FIXME: obsolete
 def graph_unique_change_when_adding(species, cluster2genes, weights_clean, reverse = True):
     print("Graph of the change of unique clusters' fraction with each new added genome.")
     if not reverse:
@@ -258,6 +263,7 @@ def graph_unique_change_when_adding(species, cluster2genes, weights_clean, rever
         bar = bar.ljust(height)
         print('%s\t%s\t%s' % (bar, ratio, s))
 
+# FIXME: obsolete
 def cumulative_growth(species, cluster2genes, weights_clean, reverse = True):
     '''
     Show expected and observed growth of the number of unique clusters
@@ -295,6 +301,7 @@ def cumulative_growth(species, cluster2genes, weights_clean, reverse = True):
     for item in table:
         print('%s\t%s\t%s\t%s' % item)
 
+# FIXME: obsolete
 def clusters_of_clusters(species, weights_clean, numbers2products, args):
     'not used at the moment, possibly not fully functional - not reviewed'
     print('Grouping into clusters with 11, 10, ... links.')
@@ -405,7 +412,7 @@ def clusters_of_clusters(species, weights_clean, numbers2products, args):
 # /Set of functions used by process()
 #
 
-
+# FIXME: obsolete
 def process(all_clusters, inputs, paranoid, args):
     # TODO: simplify, split up this function
     '''
@@ -912,15 +919,6 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     del inparanoidir, curr_path
 
 
-# multiparanoid, reportedly, cannot handle more than ~20 species.
-# multiparanoid requires program file editing for input and output paths.
-#def run_multiparanoid(inputs, args):
-#    '''
-#    multiparanoid.pl -species Actinosynnema_mirum_DSM43827.faa+Amycolatopsis_mediterranei_S699.faa+Kitasatospora_setae_KM6054.faa
-#    '''
-#    pass
-
-
 def run_quickparanoid(inparanoidir, faafiles, project):
     '''
     Requires a config file, which is simply a list of all .faa files, 1 per line.
@@ -1021,7 +1019,7 @@ def main():
     parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
     parser.add_argument('--no-extensions', action = 'store_true', default = False, help='pass --no-extensions option to the modified antismash2 (see README for details) [default: %(default)s]')
     parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
- #   parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
+#    parser.add_argument('--height', action = 'store', type=int, default = 50, help='bar heights for text graphs [default: %(default)s]')
     parser.add_argument('--from-file', action = 'store', help='read paths to GenBank files (one per line) from the provided file')
     parser.add_argument(dest="paths", help="paths to GenBank files with genomes to analyze", metavar="path", nargs='*')
     args = parser.parse_args()
