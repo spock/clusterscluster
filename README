@@ -17,12 +17,12 @@ Dependencies
     * SciPy
 * antismash2 (possibly but not necessarily patched, see below)
 * usearch
-* Custom-edited quickparanoid (included)
 * InParanoid 4.1 from http://software.sbc.su.se/cgi-bin/request.cgi?project=inparanoid :
     * free for private study, education or nonprofit research only
     * Perl
         * XML::Parser
     * BLAST 2.2.x
+* QuickParanoid from http://pl.postech.ac.kr/QuickParanoid/ (patched, included)
 * R: per-analysis packages
     * iNEXT
     * micropan
@@ -30,9 +30,11 @@ Dependencies
 Installation
 ============
 
-Modifying antismash2
---------------------
-cluster.py can use a version of antismash which avoids extending clusters using
+antismash2 + optional patch
+---------------------------
+After you install antismash2, run_antismash.py must be added to system's PATH.
+
+cluster.py can use a version of antismash which avoids extending clusters using  
 the rules in cluster_rules.txt. Here's how you can add --no-extensions option to antismash2:
 
 - install antismash2 from git to a location you can write to, add run_antismash
@@ -48,6 +50,11 @@ InParanoid 4.1 has a restrictive license, so it is not present in the repository
 It should be installed into custom_inparanoid directory.  
 There is a patch custom_inparanoid/inparanoid.pl.patch with some improvements, clean ups,  
 and changes necessary for InParanoid to be used by cluster.py.
+
+QuickParanoid (patched, included)
+---------------------------------
+QuickParanoid (already patched) is included in the quickparanoid directory of the repository.  
+Patch against the original downloaded version is also available as quickparanoid/qp.patch.
 
 Dependencies
 ------------

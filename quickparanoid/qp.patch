@@ -1,0 +1,70 @@
+--- a/qp	2008-05-26 04:34:12.000000000 +0200
++++ b/qp	2014-03-19 18:12:33.263277260 +0100
+@@ -2,33 +2,50 @@
+ echo "====================================================="
+ echo "                   QuickParanoid "
+ echo "====================================================="
++echo "*** MODIFIED for clusterscluster project."
++echo "*** Instead of interactively asking for 5 arguments,"
++echo "*** 3 must now be provided on the command line to 'qp'."
++echo "*** Arguments should have no spaces in them."
++echo " dataset_directory (this is where the sqltable.* files are, with a trailing '/')"
++echo " configfile_path (text file with 1 per line .faa file names)"
++echo " execfile_prefix (how to name the resulting executable?)"
++echo "*** datafile_prefix is 'sqltable.' by default, edit 'qp' to change"
++echo "*** datafile_separator is '-' by default, edit 'qp' to change"
++
++if [ $# -ne 3 ]; then
++    echo "See the message above: 3 arguments are required."
++    exit 2
++fi
++
++#read -p "Dataset directory [default = \".\" (current directory)]: " FILE_DIRECTORY
++#if [ -z ${FILE_DIRECTORY} ]; then
++#  FILE_DIRECTORY="."
++#  fi
++FILE_DIRECTORY="$1"
+ 
+-read -p "Dataset directory [default = \".\" (current directory)]: " FILE_DIRECTORY
+-if [ -z ${FILE_DIRECTORY} ]; then
+-  FILE_DIRECTORY="."
+-  fi
+-
+-read -p "Data file prefix [default = \"sqltable.\"]: " FILE_PREFIX
++#read -p "Data file prefix [default = \"sqltable.\"]: " FILE_PREFIX
+ if [ -z ${FILE_PREFIX} ]; then
+   FILE_PREFIX="sqltable."
+   fi
+ 
+-read -p "Data file separator [default = \"-\"]: " FILE_SEPARATOR
++#read -p "Data file separator [default = \"-\"]: " FILE_SEPARATOR
+ if [ -z ${FILE_SEPARATOR} ]; then
+   FILE_SEPARATOR="-"
+   fi
+ 
+-read -p "Configuration file [default = \"${FILE_DIRECTORY}/config\"]: " CONFIG_FILE
+-if [ -z ${CONFIG_FILE} ]; then
+-  CONFIG_FILE=${FILE_DIRECTORY}/config
+-  fi
+-
+-read -p "Executable file prefix [default = \"test\"]: " EXEC_FILE_PREFIX
+-if [ -z ${EXEC_FILE_PREFIX} ]; then
+-  EXEC_FILE_PREFIX="test"
+-  fi
++#read -p "Configuration file [default = \"${FILE_DIRECTORY}/config\"]: " CONFIG_FILE
++#if [ -z ${CONFIG_FILE} ]; then
++#  CONFIG_FILE=${FILE_DIRECTORY}/config
++#  fi
++CONFIG_FILE="$2"
++
++#read -p "Executable file prefix [default = \"test\"]: " EXEC_FILE_PREFIX
++#if [ -z ${EXEC_FILE_PREFIX} ]; then
++#  EXEC_FILE_PREFIX="test"
++#  fi
++EXEC_FILE_PREFIX="$3"
+ 
+-export FILE_DIRECTORY=${FILE_DIRECTORY}/        # append a trailing "/" 
++#export FILE_DIRECTORY=${FILE_DIRECTORY}/        # append a trailing "/" 
+ 
+ #===========================================
+ #        generate qp.h header file
