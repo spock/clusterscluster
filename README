@@ -17,10 +17,12 @@ Dependencies
     * SciPy
 * antismash2 (possibly but not necessarily patched, see below)
 * usearch
-* Custom-edited Inparanoid 4.1 (included)
 * Custom-edited quickparanoid (included)
-* inparanoid:
-    * perl XML::Parser
+* InParanoid 4.1 from http://software.sbc.su.se/cgi-bin/request.cgi?project=inparanoid :
+    * free for private study, education or nonprofit research only
+    * Perl
+        * XML::Parser
+    * BLAST 2.2.x
 * R: per-analysis packages
     * iNEXT
     * micropan
@@ -39,6 +41,13 @@ the rules in cluster_rules.txt. Here's how you can add --no-extensions option to
   `git am` to add support for the --no-extensions option (patch was made against
   commit 04532e8aa05ff1039acba5bd11613e929c409eca)
 - resolve any possible conflicts while patching.
+
+InParanoid 4.1 + patch
+----------------------
+InParanoid 4.1 has a restrictive license, so it is not present in the repository.  
+It should be installed into custom_inparanoid directory.  
+There is a patch custom_inparanoid/inparanoid.pl.patch with some improvements, clean ups,  
+and changes necessary for InParanoid to be used by cluster.py.
 
 Dependencies
 ------------
