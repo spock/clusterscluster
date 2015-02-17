@@ -111,3 +111,5 @@ TODO list
 - add mechanisms for discerning highly similar NRPK/PKS clusters,
   e.g. by the biosynthetic domains composition + domains order
 - cleanup (remove or move into external files) obsolete code
+- check/add file function explanations
+- provide a sample analysis session script/history file
