@@ -3,11 +3,11 @@ Code contributions (patches) of all types are welcome.
 Purpose of the software
 =======================
 Annotate secondary metabolite biosynthesis clusters in supplied genomes with antismash2,
-then compare clusters to find similar and unique ones.
-Analyze cluster pairs table, find genomes with the highest absolute unique clusters count.
-Examine changes to unique clusters count when changing thresholds.
-Plot clusters by type. Plot cumulative unique clusters scatterplot, using genome order resampling.
-Perform rarefaction analysis.
+then compare clusters to find similar and unique ones.  
+Analyze cluster pairs table, find genomes with the highest absolute unique clusters count.  
+Examine changes to unique clusters count when changing thresholds.  
+Plot clusters by type. Plot cumulative unique clusters scatterplot, using genome order resampling.  
+Perform rarefaction analysis.  
 For a fairly detailed example, please see <future article URL>
 and http://prokars.org/assessment-of-actinobacteria-biosynthetic-potential.html
 
