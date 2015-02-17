@@ -1,13 +1,3 @@
-From eb324a10520ddc6bb692792dcc5c125f9be3ac37 Mon Sep 17 00:00:00 2001
-From: Bogdan <to.bogdan@gmail.com>
-Date: Thu, 13 Mar 2014 10:45:16 +0100
-Subject: [PATCH] added support for --no-extensions option
-
----
- antismash/generic_modules/hmm_detection/__init__.py | 9 ++++++---
- run_antismash.py                                    | 3 +++
- 2 files changed, 9 insertions(+), 3 deletions(-)
-
 diff --git a/antismash/generic_modules/hmm_detection/__init__.py b/antismash/generic_modules/hmm_detection/__init__.py
 index 024a27d..8c1e6d0 100644
 --- a/antismash/generic_modules/hmm_detection/__init__.py
