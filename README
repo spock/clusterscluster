@@ -13,14 +13,17 @@ and http://prokars.org/assessment-of-actinobacteria-biosynthetic-potential.html
 
 Dependencies
 ============
-Python 2.7+
-antismash2 (possibly but not necessarily patched, see below)
-SciPy
-Custom-edited Inparanoid 4.1 (included)
-Custom-edited quickparanoid (included)
-inparanoid:
-- perl XML::Parser
-R: per-analysis packages (iNEXT, micropan).
+* Python 2.7+
+    * SciPy
+* antismash2 (possibly but not necessarily patched, see below)
+* usearch
+* Custom-edited Inparanoid 4.1 (included)
+* Custom-edited quickparanoid (included)
+* inparanoid:
+    * perl XML::Parser
+* R: per-analysis packages
+    * iNEXT
+    * micropan
 
 Installation
 ============
