@@ -1,3 +1,5 @@
+#!/usr/bin/Rscript
+
 preprocess = function(fname) {
 	# read csv file
 	raw = read.csv(file = fname, header = TRUE, sep = "\t")
@@ -16,4 +18,17 @@ preprocess = function(fname) {
 	# remove numeric row names; may later replace with some IDs?
 	row.names(raw) = NULL
 	return(raw)
+}
+
+if (!interactive()) {
+    args <- commandArgs(trailingOnly = TRUE)
+    if (length(args) == 1) {
+        raw = preprocess(args[1])
+        new_file = paste0(dirname(args[1]), '/preprocessed_', basename(args[1]))
+        cat('Writing preprocessed data to:', new_file, '\n')
+        write.csv(raw, file = new_file)
+    }
+    else {
+        cat('Usage: preprocess.R results.csv\n')
+    }
 }
