@@ -9,7 +9,6 @@ Examine changes to unique clusters count when changing thresholds.
 Plot clusters by type. Plot cumulative unique clusters scatterplot, using genome order resampling.  
 Perform rarefaction analysis.  
 For a fairly detailed example, please see <future article URL>
-and http://prokars.org/assessment-of-actinobacteria-biosynthetic-potential.html
 
 Dependencies
 ============
