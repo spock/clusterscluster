@@ -132,4 +132,4 @@ TODO list
   e.g. by the biosynthetic domains composition + domains order
 - cleanup (remove or move into external files) obsolete code
 - check/add file function explanations
-- provide a sample analysis session script/history file
+- provide a sample analysis R session script/history file
