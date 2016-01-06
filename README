@@ -1,5 +1,10 @@
 Code contributions (patches) of all types are welcome.
 
+Project status
+==============
+Frozen due to lack of human resources for further development.
+Cooperation/collaboration may unfreeze the project, send your inquiries.
+
 Purpose of the software
 =======================
 Annotate secondary metabolite biosynthesis clusters in supplied genomes with antismash2,
@@ -15,6 +20,7 @@ Dependencies
 * Python 2.7+
     * SciPy
 * antismash2 (possibly but not necessarily patched, see below)
+    * antismash3 should be fully compatible, but wasn't tested yet
 * usearch from http://www.drive5.com/usearch/
 * InParanoid 4.1 from http://software.sbc.su.se/cgi-bin/request.cgi?project=inparanoid :
     * free for private study, education or nonprofit research only
@@ -120,7 +126,7 @@ optional arguments:
 License
 =======
 This software is currently available under the GNU Affero General Public License Version 3 (AGPL-3.0).  
-Other (commercial, exclusive) licenses are possible, please contact Bogdan Tokovenko for details.
+Other (commercial, exclusive) licenses are possible.
 
 TODO list
 =========
