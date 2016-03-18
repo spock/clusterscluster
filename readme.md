@@ -46,7 +46,7 @@ the rules in cluster_rules.txt. Here's how you can add --no-extensions option to
   to PATH;
 - apply the supplied 0001-added-support-for-no-extensions-option.patch using
   `git am` to add support for the --no-extensions option (patch was made against
-  commit 04532e8aa05ff1039acba5bd11613e929c409eca)
+  commit `04532e8aa05ff1039acba5bd11613e929c409eca`)
 - resolve any possible conflicts while patching.
 
 InParanoid 4.1 + patch
@@ -73,55 +73,50 @@ to estimate the number of orthologous links between clusters. Use --skip-ortholo
 Usage
 =====
 $ cluster.py --help
-usage: cluster.py [-h] [-d] [-q] [-V] [--trim] [--fulldp] [--highmem]
-                  [--cutoff CUTOFF] [--skip-putative] [--skip-orthology]
-                  [--no-name-problems] [--no-tree-problems]
-                  [--emulate-inparanoid] [--prefix PREFIX] [--project PROJECT]
-                  [--force] [--no-extensions] [--threshold THRESHOLD]
-                  [--from-file FROM_FILE]
-                  [path [path ...]]
+usage: cluster.py [-h] [-d] [-q] [-V] [--trim] [--fulldp] [--highmem]  
+                  [--cutoff CUTOFF] [--skip-putative] [--skip-orthology]  
+                  [--no-name-problems] [--no-tree-problems]  
+                  [--emulate-inparanoid] [--prefix PREFIX] [--project PROJECT]  
+                  [--force] [--no-extensions] [--threshold THRESHOLD]  
+                  [--from-file FROM_FILE]  
+                  [path [path ...]]  
 
-positional arguments:
-  path                  paths to GenBank files with genomes to analyze
+positional arguments:  
+  path                  paths to GenBank files with genomes to analyze  
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -d, --debug           set verbosity level to debug [default: False]
-  -q, --quiet           report only warnings and errors [default: False]
-  -V, --version         show program's version number and exit
-  --trim                trim away antismash2 cluster extensions [default:
-                        False]
-  --fulldp              use full dynamic programming solution in usearch
-                        alignment (much slower!) [default: False]
-  --highmem             assume huge RAM: all GenBanks are loaded early and
-                        kept in RAM (faster processing) [default: False]
-  --cutoff CUTOFF       protein identity cut-off when aligning with usearch
-                        [default: 0.6]
-  --skip-putative       exclude putative clusters from the analysis [default:
-                        False]
-  --skip-orthology      do not run any orthology analysis [default: False]
-  --no-name-problems    only use ortho-clusters which do not have diff.names
-                        tree_conflict problems [default: False]
-  --no-tree-problems    only use ortho-clusters which do not have
-                        [diff.names/diff.numbers] tree_conflict problems
-                        [default: False]
-  --emulate-inparanoid  only print generated inparanoid commands, do not run;
-                        exit after inparanoid blasting; suppress some normal
-                        output [default: False]
-  --prefix PREFIX       output CSV files prefix [default: out]
-  --project PROJECT     put all the project files into this directory
-                        [default: cluster_project]
-  --force               insist on re-using existing project directory (this
-                        will re-use existing intermediate files) [default:
-                        False]
-  --no-extensions       pass --no-extensions option to the modified antismash2
-                        (see README for details) [default: False]
-  --threshold THRESHOLD
-                        cluster links with weight below this one will be
-                        discarded [default: 0.0]
-  --from-file FROM_FILE
-                        read paths to GenBank files (one per line) from the
-                        provided file
+optional arguments:  
+  -h, --help            show this help message and exit  
+  -d, --debug           set verbosity level to debug [default: False]  
+  -q, --quiet           report only warnings and errors [default: False]  
+  -V, --version         show program's version number and exit  
+  --trim                trim away antismash2 cluster extensions [default: False]  
+  --fulldp              use full dynamic programming solution in usearch  
+                        alignment (much slower!) [default: False]  
+  --highmem             assume huge RAM: all GenBanks are loaded early and  
+                        kept in RAM (faster processing) [default: False]  
+  --cutoff CUTOFF       protein identity cut-off when aligning with usearch [default: 0.6]  
+  --skip-putative       exclude putative clusters from the analysis [default: False]  
+  --skip-orthology      do not run any orthology analysis [default: False]  
+  --no-name-problems    only use ortho-clusters which do not have diff.names  
+                        tree_conflict problems [default: False]  
+  --no-tree-problems    only use ortho-clusters which do not have  
+                        [diff.names/diff.numbers] tree_conflict problems [default: False]  
+  --emulate-inparanoid  only print generated inparanoid commands, do not run;  
+                        exit after inparanoid blasting; suppress some normal  
+                        output [default: False]  
+  --prefix PREFIX       output CSV files prefix [default: out]  
+  --project PROJECT     put all the project files into this directory  
+                        [default: cluster_project]  
+  --force               insist on re-using existing project directory (this  
+                        will re-use existing intermediate files) [default: False]  
+  --no-extensions       pass --no-extensions option to the modified antismash2  
+                        (see README for details) [default: False]  
+  --threshold THRESHOLD  
+                        cluster links with weight below this one will be  
+                        discarded [default: 0.0]  
+  --from-file FROM_FILE  
+                        read paths to GenBank files (one per line) from the  
+                        provided file  
 
 License
 =======
