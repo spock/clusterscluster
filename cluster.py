@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # encoding: utf-8
-'''
+"""
 cluster -- find similar biosynthetic clusters in multiple genomes.
 
 First, cluster.py processes all input genbank files to associate genome sequence
@@ -28,7 +28,7 @@ Finally, cluster processes genomes and calculates similarity
 between biosynthetic clusters in those genomes.
 
 cluster.py outputs CSV files with collected information for further analysis.
-'''
+"""
 
 
 from __future__ import print_function
@@ -46,7 +46,6 @@ from shutil import move
 from argparse import ArgumentParser
 from multiprocessing import Process, Queue, cpu_count
 from itertools import permutations, combinations, product, combinations_with_replacement
-from collections import defaultdict
 
 from lib import utils
 from lib.ClusterPair import ClusterPair, Cluster
@@ -54,19 +53,19 @@ from lib.Genome import Genome
 from lib.MultiParanoid import MultiParanoid
 
 
-#__all__ = []
+# __all__ = []
 __version__ = 0.7
 __date__ = '2013-07-10'
 __updated__ = '2014-05-11'
 
 
 def preprocess_input_files(inputs, args):
-    '''
+    """
     inputs: dict[genome.id] = Genome, is populated by this function.
     args.paths: list of genbank files to process.
     Read IDs and SeqRecords from GenBank files, make sure IDs are unique.
     Write 'all_clusters.csv' file with 3 columns: genomeid_cluster, Genome_ID, cluster.
-    '''
+    """
     # Process genome IDs.
     for infile in args.paths:
         g = Genome(infile, args.project)
@@ -75,7 +74,7 @@ def preprocess_input_files(inputs, args):
             # Check for an exact duplicate.
             if (inputs[g.id].contigs == g.contigs and
                 inputs[g.id].genome_size == g.genome_size and
-                inputs[g.id].species == g.species):
+                    inputs[g.id].species == g.species):
                 logging.error('Found identical genomes of "%s" with ID %s, %s bp long (in %s fragments).',
                               g.species, g.id, g.genome_size, g.contigs)
                 raise Exception('IdenticalGenomesError')
@@ -95,6 +94,7 @@ def preprocess_input_files(inputs, args):
     workers = min(cpu_count(), total_genomes)
     task_queue = Queue()
     done_queue = Queue()
+
     # 1. Define worker.
     def geneparser(tasks, done, args):
         while True:
@@ -112,7 +112,7 @@ def preprocess_input_files(inputs, args):
             g.run_antismash(args.force, args.antismash_warning_shown,
                             args.no_extensions, cores = 1)
             # FIXME: cannot directly assign to args.antismash_warning_shown!!! shared object!!!
-            #args.antismash_warning_shown = g.antismash_warning_shown
+            # args.antismash_warning_shown = g.antismash_warning_shown
             g.parse_gene_cluster_relations(args)
             # Do not process zero-cluster genomes.
             if g.num_clusters() == 0:
@@ -146,19 +146,19 @@ def preprocess_input_files(inputs, args):
     # Setup handle to a CSV file.
     # TODO: show a warning if overwriting an existing file.
     csvall = open(join(args.project, 'all_clusters.csv'), 'w')
-    writer = csv.writer(csvall, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    writer = csv.writer(csvall, delimiter='\t', quoting=csv.QUOTE_NONE)
     # Output header.
     header = ['id', 'genome_ID', 'cluster', 'type']
     writer.writerow(header)
     for _ in range(total_genomes):
         g = done_queue.get()
-        if g != None:
+        if g is not None:
             inputs[g.id] = g
             # Output all clusters of this genome to the CSV file.
             for cluster in g.clusters:
                 writer.writerow([''.join([g.id, str(cluster)]), g.id, cluster, g.number2products[cluster]])
         # Populate all_clusters.
-        #for c in g.clusters:
+        # for c in g.clusters:
         #    all_clusters.append(cluster(g.id, c))
     # Close CSV.
     csvall.close()
@@ -172,10 +172,10 @@ def preprocess_input_files(inputs, args):
 
 
 def prepare_inparanoid(inputs, args):
-    '''
+    """
     Set up directory and .faa-files symlink for running InParanoid and
     quickparanoid. Prepare list of .faa-files w/o paths, and return it.
-    '''
+    """
     # Collect all faafile names into a list without paths.
     faafiles = []
     for _ in inputs.itervalues():
@@ -220,12 +220,13 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     total_genomes = len(faafiles)
     if not emulate_inparanoid:
         print("BLASTing %s single genomes." % total_genomes)
-    tasks = Queue(maxsize = qsize)
+    tasks = Queue(maxsize=qsize)
+
     # 1. Define worker.
     def single_blaster(tasks, total_genomes):
-        '''
+        """
         parallel worker for single blasts
-        '''
+        """
         while True:
             try:
                 # serial = counter, faaname = path to .faa file
@@ -279,9 +280,10 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     tasks = Queue(maxsize = qsize)
     if not emulate_inparanoid:
         print("BLASTing %s pairwise permutations." % total_permutations)
+
     # 1. Define worker.
     def pair_blaster(tasks, total_permutations):
-        'parallel worker for paired blasts'
+        """parallel worker for paired blasts"""
         while True:
             try:
                 # serial = counter, faa1/2 = paths to .faa files
@@ -346,12 +348,13 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
     if not emulate_inparanoid:
         total_combinations = len(list(combinations(faafiles, 2)))
         print("Analyzing with inparanoid %s pairwise combinations." % total_combinations)
-        tasks = Queue(maxsize = qsize)
+        tasks = Queue(maxsize=qsize)
+
         # 1. Define worker.
         def inparanoider(tasks, total_combinations):
-            '''
+            """
             parallel worker for paired blasts
-            '''
+            """
             while True:
                 try:
                     # serial = counter, faa1/2 = paths to .faa files
@@ -416,7 +419,7 @@ def run_inparanoid(inparanoidir, faafiles, emulate_inparanoid):
 
 
 def run_quickparanoid(inparanoidir, faafiles, project):
-    '''
+    """
     Requires a config file, which is simply a list of all .faa files, 1 per line.
     quickparanoid MUST BE RUN from quickparanoid dir!
     quickparanoid will generate a Makefile.in in its own directory.
@@ -427,7 +430,7 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     and
     ./EXEC_FILEs for some stats
     Return absolute result_name path.
-    '''
+    """
     configfile = realpath(join(project, 'quickparanoid.config'))
     logging.debug("Generating %s.", configfile)
     # TODO: possibly add a check for existing configfile and quickparanoid result,
@@ -449,8 +452,7 @@ def run_quickparanoid(inparanoidir, faafiles, project):
     logging.info('Running quickparanoid analysis: %s', ' '.join(qp))
     out, err, retcode = utils.execute(qp)
     if retcode != 0 or not exists(join(quickparanoid, project)):
-        logging.error('quickparanoid returned %d: %r while analyzing %r in %r',
-                      retcode, err, configfile, project)
+        logging.error('quickparanoid returned %d: %r while analyzing %r in %r', retcode, err, configfile, project)
         logging.error('Full output:\n%s\n', out)
         raise Exception('QuickParanoidError')
     del out, err, retcode
@@ -461,8 +463,7 @@ def run_quickparanoid(inparanoidir, faafiles, project):
          join(curr_path, project, project + 's'))
 
     # Delete leftover garbage from quickparanoid.
-    for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h',
-              '__ortholog.h']:
+    for _ in ['dump', 'gen_header', 'hashtable_itr.o', 'ortholog.o', 'qp.h', '__ortholog.h']:
         remove(join(quickparanoid, _))
 
     # Get back from quickparanoid.
@@ -489,31 +490,56 @@ def run_quickparanoid(inparanoidir, faafiles, project):
 
 
 def main():
-    '''Command line options.'''
+    """Command line options."""
     program_version = "v%s" % __version__
     program_build_date = str(__updated__)
     program_version_message = '%%(prog)s %s (%s)' % (program_version, program_build_date)
 
     parser = ArgumentParser()
-    parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False, help="set verbosity level to debug [default: %(default)s]")
-    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False, help="report only warnings and errors [default: %(default)s]")
+    parser.add_argument("-d", "--debug", dest="debug", action="store_true", default=False,
+                        help="set verbosity level to debug [default: %(default)s]")
+    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true", default=False,
+                        help="report only warnings and errors [default: %(default)s]")
     parser.add_argument('-V', '--version', action='version', version=program_version_message)
-    parser.add_argument("--trim", dest="trim", action="store_true", default=False, help="trim away antismash2 cluster extensions [default: %(default)s]")
-    parser.add_argument("--fulldp", dest="fulldp", action="store_true", default=False, help="use full dynamic programming solution in usearch alignment (much slower!) [default: %(default)s]")
-    parser.add_argument("--highmem", dest="highmem", action="store_true", default=False, help="assume huge RAM: all GenBanks are loaded early and kept in RAM (faster processing) [default: %(default)s]")
-    parser.add_argument("--cutoff", dest="cutoff", type = float, default = 0.6, help="protein identity cut-off when aligning with usearch [default: %(default)s]")
-    parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False, help="exclude putative clusters from the analysis [default: %(default)s]")
-    parser.add_argument("--skip-orthology", action="store_true", default=False, help="do not run any orthology analysis [default: %(default)s]")
-    parser.add_argument("--strict", dest="strict", action="store_true", default=False, help="orthology link weight between clusters with 5 and 10 genes will never exceed 0.5 [default: %(default)s]")
-    parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False, help="only use ortho-clusters which do not have diff.names tree_conflict problems [default: %(default)s]")
-    parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False, help="only use ortho-clusters which do not have [diff.names/diff.numbers] tree_conflict problems [default: %(default)s]")
-    parser.add_argument('--emulate-inparanoid', action = 'store_true', default = False, help='only print generated inparanoid commands, do not run; exit after inparanoid blasting; suppress some normal output [default: %(default)s]')
+    parser.add_argument("--trim", dest="trim", action="store_true", default=False,
+                        help="trim away antismash2 cluster extensions [default: %(default)s]")
+    parser.add_argument("--fulldp", dest="fulldp", action="store_true", default=False,
+                        help="use full dynamic programming solution in usearch alignment "
+                             "(much slower!) [default: %(default)s]")
+    parser.add_argument("--highmem", dest="highmem", action="store_true", default=False,
+                        help="assume huge RAM: all GenBanks are loaded early and kept in RAM (faster processing) "
+                             "[default: %(default)s]")
+    parser.add_argument("--cutoff", dest="cutoff", type=float, default=0.6,
+                        help="protein identity cut-off when aligning with usearch [default: %(default)s]")
+    parser.add_argument("--skip-putative", dest="skipp", action="store_true", default=False,
+                        help="exclude putative clusters from the analysis [default: %(default)s]")
+    parser.add_argument("--skip-orthology", action="store_true", default=False,
+                        help="do not run any orthology analysis [default: %(default)s]")
+    parser.add_argument("--strict", dest="strict", action="store_true", default=False,
+                        help="orthology link weight between clusters with 5 and 10 genes will never exceed 0.5 "
+                             "[default: %(default)s]")
+    parser.add_argument("--no-name-problems", dest="no_name_problems", action="store_true", default=False,
+                        help="only use ortho-clusters which do not have diff.names tree_conflict problems "
+                             "[default: %(default)s]")
+    parser.add_argument("--no-tree-problems", dest="no_tree_problems", action="store_true", default=False,
+                        help="only use ortho-clusters which do not have [diff.names/diff.numbers] "
+                             "tree_conflict problems [default: %(default)s]")
+    parser.add_argument('--emulate-inparanoid', action = 'store_true', default=False,
+                        help='only print generated inparanoid commands, do not run; '
+                             'exit after inparanoid blasting; suppress some normal output [default: %(default)s]')
     parser.add_argument("--prefix", default='out', help="output CSV files prefix [default: %(default)s]")
-    parser.add_argument("--project", default='cluster_project', help="put all the project files into this directory [default: %(default)s]")
-    parser.add_argument('--force', action = 'store_true', default = False, help='insist on re-using existing project directory (this will re-use existing intermediate files) [default: %(default)s]')
-    parser.add_argument('--no-extensions', action = 'store_true', default = False, help='pass --no-extensions option to the modified antismash2 (see README for details) [default: %(default)s]')
-    parser.add_argument('--threshold', action = 'store', type=float, default = 0.0, help='cluster links with weight below this one will be discarded [default: %(default)s]')
-    parser.add_argument('--from-file', action = 'store', help='read paths to GenBank files (one per line) from the provided file')
+    parser.add_argument("--project", default='cluster_project',
+                        help="put all the project files into this directory [default: %(default)s]")
+    parser.add_argument('--force', action='store_true', default=False,
+                        help='insist on re-using existing project directory '
+                             '(this will re-use existing intermediate files) [default: %(default)s]')
+    parser.add_argument('--no-extensions', action='store_true', default=False,
+                        help='pass --no-extensions option to the modified antismash2 '
+                             '(see README for details) [default: %(default)s]')
+    parser.add_argument('--threshold', action='store', type=float, default=0.0,
+                        help='cluster links with weight below this one will be discarded [default: %(default)s]')
+    parser.add_argument('--from-file', action='store',
+                        help='read paths to GenBank files (one per line) from the provided file')
     parser.add_argument(dest="paths", help="paths to GenBank files with genomes to analyze", metavar="path", nargs='*')
     args = parser.parse_args()
 
@@ -534,7 +560,7 @@ def main():
     # Where do we take the paths from?
     if len(args.paths) > 0:
         logging.debug("GenBank paths were provided on the command line, using these.")
-    if args.from_file != None:
+    if args.from_file is not None:
         logging.debug("GenBank paths were provided in '%s', using these.",
                       args.from_file)
         if exists(args.from_file):
@@ -567,11 +593,11 @@ def main():
         else:
             logging.error('Specified project directory "%s" already exists! Use --force to continue anyway.', args.project)
             sys.exit(1)
-    else: # create
+    else:  # create
         mkdir(args.project)
 
     # "Catalog" all genomes.
-    genomes = {} # Map genome ID to Genome object.
+    genomes = {}  # Map genome ID to Genome object.
 
     if len(args.paths) == 1:
         logging.warning("Single input file specified, program will exit after preprocessing.")
@@ -620,7 +646,7 @@ def main():
         res_fname += '_no_extensions'
     res_fname += '.csv'
     csvout = open(join(args.project, res_fname), 'w')
-    writer = csv.writer(csvout, delimiter = '\t', quoting = csv.QUOTE_NONE)
+    writer = csv.writer(csvout, delimiter='\t', quoting=csv.QUOTE_NONE)
     # Output header.
     header = ['is_intra', 'genome1_ID', 'genome2_ID', 'species1', 'species2',
               'cluster1', 'cluster2', 'type1', 'type2', 'genes1_count',
@@ -631,20 +657,21 @@ def main():
     del header
 
     # Every loaded genome (g1) is expected to be used many times before unloading.
-    combinations_counter = 0 # to track progress, outer genomes loop only
-    total_combinations = len(list(combinations_with_replacement(genomes.keys(), r = 2)))
-    prev_g1 = None # tracker of the previous g1 genome, to know when to unload it
+    combinations_counter = 0  # to track progress, outer genomes loop only
+    total_combinations = len(list(combinations_with_replacement(genomes.keys(), r=2)))
+    prev_g1 = None  # tracker of the previous g1 genome, to know when to unload it
 
     # Preparing for parallel usearch.
     # 0. Define queues.
-    tasks = Queue(maxsize = cpu_count() * 4)
+    tasks = Queue(maxsize=cpu_count() * 4)
     done  = Queue()
+
     # 1. Define worker.
     def usearcher():
-        '''
+        """
         Run_usearch on a single NamedTemporaryFile seqfile from 'tasks' queue,
         put (CPid, (avg_identity, gene1_to_gene2, protein_identities)) into 'done'.
-        '''
+        """
         while True:
             try:
                 task = tasks.get()
@@ -659,7 +686,7 @@ def main():
             result = utils.run_usearch(seqfilename, args.cutoff, args.fulldp)
             remove(seqfilename)
             logging.debug('Deleted %s.', seqfilename)
-            if result != None:
+            if result is not None:
                 done.put((CPid, result))
                 continue
             done.put((CPid, None))
@@ -672,7 +699,7 @@ def main():
         workers_list.append(p)
     del p
 
-    for g1, g2 in combinations_with_replacement(genomes.keys(), r = 2):
+    for g1, g2 in combinations_with_replacement(genomes.keys(), r=2):
         combinations_counter += 1
         print('%s / %s\t' % (combinations_counter, total_combinations), genomes[g1].id, genomes[g2].id)
         # Unload previous "second genome", if it is not equal to the "first genome".
@@ -687,8 +714,7 @@ def main():
         genome2 = genomes[g2]
 
         # Load caches, if any.
-        pair_id = '_'.join([g1, str(genome1.total_genes_in_clusters),
-                            g2, str(genome2.total_genes_in_clusters)])
+        pair_id = '_'.join([g1, str(genome1.total_genes_in_clusters), g2, str(genome2.total_genes_in_clusters)])
         ortho_file = join(ortholinks, pair_id)
         # Flag, if True - write cache back to the file.
         orthocache_updated = False
@@ -713,13 +739,10 @@ def main():
         # When g1 == g2, multiple internal cluster comparisons (c1 to c2, then c2 to c1, etc) would happen with 'product'.
         if g1 == g2:
             # Generate only unique intra-species cluster-cluster pairs (combinations).
-            pairslist = [(Cluster(g1, c1), Cluster(g1, c2))
-                         for c1, c2 in combinations(genome1.clusters, r = 2)]
+            pairslist = [(Cluster(g1, c1), Cluster(g1, c2)) for c1, c2 in combinations(genome1.clusters, r=2)]
         else:
             # Pair each cluster from g1 with each cluster from g2 (product).
-            pairslist = [(Cluster(g1, c1), Cluster(g2, c2))
-                         for c1, c2 in product(genome1.clusters,
-                                               genome2.clusters)]
+            pairslist = [(Cluster(g1, c1), Cluster(g2, c2)) for c1, c2 in product(genome1.clusters, genome2.clusters)]
         # 3. Populate tasks queue.
         logging.debug('Populating usearcher tasks queue.')
         for cl1, cl2 in pairslist:
@@ -753,7 +776,7 @@ def main():
         for _ in range(len(cluster_pairs)):
             result = done.get()
             logging.debug('Collected task %s of %s local.', _ + 1, len(cluster_pairs))
-            if result[1] == None: # no result for this cluster pair
+            if result[1] is None:  # no result for this cluster pair
                 # Still save this to the cache
                 if result[0] not in usearchcache:
                     usearchcache[result[0]] = None
@@ -764,26 +787,26 @@ def main():
             if result[0] not in usearchcache: # CPid
                 usearchcache[result[0]] = result[1]
             cluster_pairs_counter += 1
-            #logging.debug('Average identity of %s and %s is %s ',
-            #              cp.gc1, cp.gc2, cp.avg_identity)
-            #print(cp.protein_identities)
+            # logging.debug('Average identity of %s and %s is %s ',
+            #               cp.gc1, cp.gc2, cp.avg_identity)
+            # print(cp.protein_identities)
             if cp.avg_identity[0] > 2:
                 # Calculate gene order preservation (for similar genes).
                 cp.gene_order(genome1, genome2)
             # Calculate predicted domains order preservation within similar genes.
-            #cp.domains(genomes)
+            # cp.domains(genomes)
             # Calculate cluster-level nucleotide identity.
-            #cp.nucleotide_similarity(genomes)
+            # cp.nucleotide_similarity(genomes)
             writer.writerow([int(cp.intra), genome1.id, genome2.id,
-                   genome1.species, genome2.species, cp.c1, cp.c2,
-                   genome1.number2products[cp.c1],
-                   genome2.number2products[cp.c2],
-                   cp.num_c1_genes(genome1), cp.num_c2_genes(genome2),
-                   genome1.clustersizes[cp.c1],
-                   genome2.clustersizes[cp.c2], cp.link1, cp.link2,
-                   cp.avg_identity[0], round(cp.avg_identity[1], 1),
-                   round(cp.pearson, 2), round(cp.kendall, 2),
-                   round(cp.spearman, 2)])
+                             genome1.species, genome2.species, cp.c1, cp.c2,
+                             genome1.number2products[cp.c1],
+                             genome2.number2products[cp.c2],
+                             cp.num_c1_genes(genome1), cp.num_c2_genes(genome2),
+                             genome1.clustersizes[cp.c1],
+                             genome2.clustersizes[cp.c2], cp.link1, cp.link2,
+                             cp.avg_identity[0], round(cp.avg_identity[1], 1),
+                             round(cp.pearson, 2), round(cp.kendall, 2),
+                             round(cp.spearman, 2)])
         logging.debug('Done collecting results.')
 
         if g1 != g2 and not args.highmem:

@@ -2,14 +2,14 @@ from __future__ import print_function
 import logging
 import glob
 from Bio import SeqIO
-from Bio.Alphabet import generic_dna#, generic_protein
+from Bio.Alphabet import generic_dna  # , generic_protein
 from shutil import rmtree, move
 from os.path import join, exists
 from multiprocessing import cpu_count
 from bx.intervals.intersection import Interval, IntervalTree
 from collections import namedtuple
 # FIXME: this fails when profiling: from lib import utils
-#from lib.utils import execute
+# from lib.utils import execute
 from lib import utils
 from lib.gb2fasta import gb2fasta
 from lib.extract_translation_from_genbank import extract_translation_from_genbank
@@ -18,47 +18,46 @@ from lib.ClusterPair import GeneOrder
 # making this import obsolete.
 from lib import hmm_detection
 
-
 FeatureTuple = namedtuple('FeatureTuple', ['feature', 'record_index', 'feature_index'])
 
 
 class Genome(object):
-    '''
+    """
     Represents a single genome.
     Has methods to annotate it, and generate derivative files.
     Contains gene-cluster-product-coordinate mappings.
-    '''
+    """
 
-    def __init__(self, infile, project, assume_infile_after_as2 = False):
-        '''
+    def __init__(self, infile, project, assume_infile_after_as2=False):
+        """
         infile: path to the original GenBank file for this genome
         project: path to the project directory, which has all the derivative files
         assume_infile_after_as2: infile GenBank already has antismash2 cluster annotations
-        '''
+        """
         self.infile = infile
         self.project = project
         self.assume_infile_after_as2 = assume_infile_after_as2
         self.species = ''
-        self.accession = '' # accession of the longest record
-        self.id = '' # id of the longest record
-        self.accessions = [] # other accessions
-        self.ids = [] # other ids
-        self.contigs = 0 # count of records/contigs/plasmids
-        self.genome_size = 0 # sum of lengths of all records
-        self.total_genes_in_clusters = 0 # number of genes in all clusters
-        self.fnafile = '' # path to .fna file
+        self.accession = ''  # accession of the longest record
+        self.id = ''  # id of the longest record
+        self.accessions = []  # other accessions
+        self.ids = []  # other ids
+        self.contigs = 0  # count of records/contigs/plasmids
+        self.genome_size = 0  # sum of lengths of all records
+        self.total_genes_in_clusters = 0  # number of genes in all clusters
+        self.fnafile = ''  # path to .fna file
         if self.assume_infile_after_as2 is True:
-            self.as2file = infile # path to antismash2 file
+            self.as2file = infile  # path to antismash2 file
         else:
-            self.as2file = '' # path to antismash2 file
-        self.is_annotated = False # antismash2 annotation
-        self.clusters = [] # list of (numeric) cluster IDs
+            self.as2file = ''  # path to antismash2 file
+        self.is_annotated = False  # antismash2 annotation
+        self.clusters = []  # list of (numeric) cluster IDs
         self.faafile = ''
-        self.number2products = {} # numeric clusters to their products
-        self.coords2numbers = {} # coords of cluster to its number
-        self.cluster2genes = {} # cluster number to a list of locus_tags
-        self.gene2clusters = {} # gene ID to a list of cluster numbers
-        self.clustersizes = {} # cluster number to cluster size, bps
+        self.number2products = {}  # numeric clusters to their products
+        self.coords2numbers = {}  # coords of cluster to its number
+        self.cluster2genes = {}  # cluster number to a list of locus_tags
+        self.gene2clusters = {}  # gene ID to a list of cluster numbers
+        self.clustersizes = {}  # cluster number to cluster size, bps
         self.is_genecluster_parsed = False
         # SeqIO record.
         self.records = None
@@ -73,7 +72,7 @@ class Genome(object):
         # for later collinearity analysis.
         self.orderstrands = {}
 
-        primary_length = 0 # current primary accession sequence length
+        primary_length = 0  # current primary accession sequence length
 
         for r in SeqIO.parse(infile, 'genbank', generic_dna):
             # r.name is an accession (e.g. AF080235),
@@ -105,10 +104,8 @@ class Genome(object):
         self.accessions.remove(self.accession)
         self.ids.remove(self.id)
 
-
     def num_clusters(self):
         return len(self.clusters)
-
 
     def as2faa(self, force):
         self.faafile = join(self.project, self.id + '.faa')
@@ -117,15 +114,13 @@ class Genome(object):
         else:
             extract_translation_from_genbank(self.as2file, self.faafile, False)
 
-
     def gb2fna(self):
         # Write FASTA to ID.fna, do nothing if file exists.
         self.fnafile = join(self.project, self.id + '.fna')
         gb2fasta(self.infile, self.fnafile, self.id)
 
-
     def run_antismash(self, force, antismash_warning_shown, no_extensions,
-                      cores = cpu_count()):
+                      cores=cpu_count()):
         '''
         force: will re-use existing antismash2 annotation
         antismash_warning_shown: flag, whether antismash2 re-use warning had already been shown
@@ -144,7 +139,8 @@ class Genome(object):
                 self.antismash_warning_shown = True
                 logging.warning('Reusing existing antismash2 annotation(s).')
                 logging.warning('\t--no-extensions option will NOT be honored!')
-                logging.warning('\tDo not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
+                logging.warning(
+                    '\tDo not use --force, or delete antismash2 *.gbk files to re-run antismash2 annotation.')
             # Re-using any further files is only possible if we do re-use antismash files.
             self.antismash2_reused = True
         else:
@@ -175,7 +171,6 @@ class Genome(object):
             rmtree(output_folder)
             del output_folder, out, err, retcode
 
-
     def parse_cluster_number(self, note):
         '''
         Given a list of items from the "note" field of the GenBank feature,
@@ -184,7 +179,6 @@ class Genome(object):
         for i in note:
             if i.startswith('Cluster number: '):
                 return int(i[16:])
-
 
     def parse_gene_cluster_relations(self, args):
         '''
@@ -250,13 +244,14 @@ class Genome(object):
                             try:
                                 assert start < end
                             except:
-                                logging.exception('trimming extension failed for: %s (%s), extension %s, ori start %s, new start %s, ori end %s, new end %s',
-                                                  f.qualifiers['product'][0],
-                                                  cluster_number, extension,
-                                                  f.location.start.position,
-                                                  start,
-                                                  f.location.end.position,
-                                                  end)
+                                logging.exception(
+                                    'trimming extension failed for: %s (%s), extension %s, ori start %s, new start %s, ori end %s, new end %s',
+                                    f.qualifiers['product'][0],
+                                    cluster_number, extension,
+                                    f.location.start.position,
+                                    start,
+                                    f.location.end.position,
+                                    end)
                                 raise
                     clustertrees[record_number].add_interval(Interval(start, end))
                     self.cluster2genes[cluster_number] = []
@@ -276,7 +271,7 @@ class Genome(object):
                     self.clustersizes[cluster_number] = end - start
                     logging.info('''\t('%s', %s): %s [%s, %s], %s bp long''',
                                  self.id, cluster_number, f.qualifiers['product'][0],
-                                 start, end, end-start)
+                                 start, end, end - start)
         logging.debug('\tAssign genes to biosynthetic clusters')
         for record_number, r in enumerate(self.records):
             for f in r.features:
@@ -309,7 +304,8 @@ class Genome(object):
                             cluster_serial = self.coords2numbers[(cluster.start, cluster.end)]
                             self.cluster2genes[cluster_serial].append(gene_name)
                             self.gene2clusters[gene_name].append(cluster_serial)
-                            self.orderstrands[cluster_serial].append(GeneOrder(int(f.location.start.position), f.strand, gene_name))
+                            self.orderstrands[cluster_serial].append(
+                                GeneOrder(int(f.location.start.position), f.strand, gene_name))
                         del gene_name, cluster_serial
         for k in self.orderstrands.iterkeys():
             # In each cluster, sort genes ASCending by start position.
@@ -320,7 +316,6 @@ class Genome(object):
         del clustertrees
         if not args.highmem:
             self.unload()
-
 
     def load(self):
         '''
@@ -335,7 +330,6 @@ class Genome(object):
         else:
             logging.debug('Genome %s was already loaded.', self.id)
 
-
     def unload(self):
         '''
         Unload .records and .CDS (will no longer be accessible)
@@ -348,7 +342,6 @@ class Genome(object):
             logging.debug('Unloaded Genome %s.', self.id)
         else:
             logging.debug('Genome %s was already unloaded.', self.id)
-
 
     def index_genbank_features(self, feature_type, qualifier):
         '''
@@ -377,12 +370,11 @@ class Genome(object):
                         for value in feature.qualifiers[qualifier]:
                             if value in answer:
                                 print("WARNING - Duplicate key %s for %s features %i and %i" \
-                                   % (value, feature_type, answer[value], index))
+                                      % (value, feature_type, answer[value], index))
                             else:
                                 answer[value] = (record_index, index)
             record_index += 1
         return answer
-
 
     def get_protein(self, geneid):
         '''
@@ -392,9 +384,11 @@ class Genome(object):
         if 'translation' in feature_tuple.feature.qualifiers:
             return feature_tuple.feature.qualifiers['translation'][0]
         else:
-            feature_tuple.feature.qualifiers['translation'] = [feature_tuple.feature.extract(self.records[feature_tuple.record_index].seq).translate(table = "Bacterial", cds = True, to_stop = True)]
+            feature_tuple.feature.qualifiers['translation'] = [
+                feature_tuple.feature.extract(self.records[feature_tuple.record_index].seq).translate(table="Bacterial",
+                                                                                                      cds=True,
+                                                                                                      to_stop=True)]
             return feature_tuple.feature.qualifiers['translation'][0]
-
 
     def get_feature_by_locustag(self, geneid):
         '''
